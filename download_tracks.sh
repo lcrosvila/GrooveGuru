@@ -34,4 +34,4 @@ do
     rm "$filename"
 done
 
-rm -r /Users/lcros/Documents/GrooveGuru/dataset/Community\ Keyboard\ Megapack\ -\ Volume\ 4/\(GLoVE\)\ Eternal\ Nocturne
+rm -r dataset/Community\ Keyboard\ Megapack\ -\ Volume\ 4/\(GLoVE\)\ Eternal\ Nocturne
