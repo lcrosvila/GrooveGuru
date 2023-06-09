@@ -19,22 +19,17 @@ urls=(
 )
 
 # Iterate over the URLs
-for url in "${urls[@]}"; do
+for url in "${urls[@]}"
+do
     # Extract the filename from the URL
     filename=$(basename "$url")
-
-    # Create a temporary directory to unzip the contents
-    temp_dir=$(mktemp -d)
-
+    
     # Download the zip file
-    wget "$url" -P "$temp_dir"
-
-    # Unzip the file
-    unzip -q "$temp_dir/$filename" -d "$temp_dir"
-
-    # Move the contents of the unzipped folders to the 'dataset' folder
-    find "$temp_dir" -mindepth 1 -maxdepth 1 -exec mv -t dataset/ {} +
-
-    # Remove the temporary directory
-    rm -r "$temp_dir"
+    wget -O "$filename" "$url"
+    
+    # Unzip the file and move its contents to the 'dataset' folder
+    unzip -q "$filename" -d dataset
+    
+    # Remove the downloaded zip file
+    rm "$filename"
 done
