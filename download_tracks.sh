@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Create the 'dataset' folder if it doesn't exist
-mkdir -p /Users/lcros/Documents/DDR_dataset
+mkdir -p dataset
 
 # Define the array of zip file URLs
 urls=(
