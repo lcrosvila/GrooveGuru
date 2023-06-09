@@ -39,7 +39,7 @@ def calc_note_abs_times(offset, bpms, note_data):
   for measure_num, measure in enumerate(note_data):
     beat_num = measure_num * 4
     pulses = len(measure) / 4
-    pulses_beats = [x / float(pulses) for x in range(beat_num * pulses, (beat_num + 4) * pulses, 1)]
+    pulses_beats = [x / pulses for x in range(int(beat_num * pulses), int((beat_num + 4) * pulses), 1)]
     for beat, data in zip(pulses_beats, measure):
       # TODO: This could be much more efficient but is not the bottleneck for the moment.
       beat_abs = calc_abs_for_beat(offset, bpms, segment_lengths, beat)

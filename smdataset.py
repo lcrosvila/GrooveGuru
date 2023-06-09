@@ -12,61 +12,62 @@ from abstime import calc_note_abs_times
 from parse import parse_sm_txt
 
 _ATTR_REQUIRED = ['title', 'offset', 'bpms', 'notes']
-def find_and_parse_sm_files(sm_dp, wildcard=''):
+def find_and_parse_sm_files(sm_dp):
   songs = []
+  # get all files that end in ".sm" from sm_dp
   for root, dirnames, filenames in os.walk(sm_dp):
-    sm_names = fnmatch.filter(filenames, '*{}*.sm'.format(wildcard))
-    for sm_name in sm_names:
-      # open file
-      sm_fp = os.path.join(root, sm_name)
-      with open(sm_fp, 'r') as sm_f:
-        sm_txt = sm_f.read()
+    for sm_name in filenames:
+      if sm_name.endswith('.sm'):       
+        # open file
+        sm_fp = os.path.join(root, sm_name)
+        with open(sm_fp, 'r') as sm_f:
+          sm_txt = sm_f.read()
 
-      # parse file
-      try:
-        sm_attrs = parse_sm_txt(sm_txt)
-      except ValueError as e:
-        smlog.error('{} in\n{}'.format(e, sm_fp))
-        continue
-      except Exception as e:
-        smlog.critical('Unhandled parse exception {}'.format(traceback.format_exc()))
-        raise e
-
-      # check required attrs
-      try:
-        for attr_name in _ATTR_REQUIRED:
-          if attr_name not in sm_attrs:
-            raise ValueError('Missing required attribute {}'.format(attr_name))
-      except ValueError as e:
-        smlog.error('{}'.format(e))
-        continue
-
-      # handle missing music
-      if 'music' not in sm_attrs:
-        music_names = []
-        sm_prefix = os.path.splitext(sm_name)[0]
-
-        # check directory files for reasonable substitutes
-        for filename in filenames:
-          prefix, ext = os.path.splitext(filename)
-          if ext.lower()[1:] in ['mp3', 'ogg']:
-            music_names.append(filename)
-
+        # parse file
         try:
-          # handle errors
-          if len(music_names) == 0:
-            raise ValueError('No music files found')
-          elif len(music_names) == 1:
-            sm_attrs['music'] = music_names[0]
-          else:
-            raise ValueError('Multiple music files {} found'.format(music_names))
+          sm_attrs = parse_sm_txt(sm_txt)
+        except ValueError as e:
+          smlog.error('{} in\n{}'.format(e, sm_fp))
+          continue
+        except Exception as e:
+          smlog.critical('Unhandled parse exception {}'.format(traceback.format_exc()))
+          raise e
+
+        # check required attrs
+        try:
+          for attr_name in _ATTR_REQUIRED:
+            if attr_name not in sm_attrs:
+              raise ValueError('Missing required attribute {}'.format(attr_name))
         except ValueError as e:
           smlog.error('{}'.format(e))
           continue
 
-      # attach absolute music path for convenience
-      music_fp = os.path.join(root, sm_attrs['music'])
-      songs.append((sm_fp, music_fp, sm_attrs))
+        # handle missing music
+        if 'music' not in sm_attrs:
+          music_names = []
+          sm_prefix = os.path.splitext(sm_name)[0]
+
+          # check directory files for reasonable substitutes
+          for filename in filenames:
+            prefix, ext = os.path.splitext(filename)
+            if ext.lower()[1:] in ['mp3', 'ogg']:
+              music_names.append(filename)
+
+          try:
+            # handle errors
+            if len(music_names) == 0:
+              raise ValueError('No music files found')
+            elif len(music_names) == 1:
+              sm_attrs['music'] = music_names[0]
+            else:
+              raise ValueError('Multiple music files {} found'.format(music_names))
+          except ValueError as e:
+            smlog.error('{}'.format(e))
+            continue
+
+        # attach absolute music path for convenience
+        music_fp = os.path.join(root, sm_attrs['music'])
+        songs.append((sm_fp, music_fp, sm_attrs))
   return songs
 
 if __name__ == '__main__':
@@ -75,14 +76,14 @@ if __name__ == '__main__':
   GEN_PREVIEWS = 'genprevs' in OPTS
   if GEN_PREVIEWS:
     from preview import write_preview_wav
-
   sm_files = find_and_parse_sm_files(SM_DIR)
   avg_difficulty = 0.0
   num_charts = 0
   for sm_fp, music_fp, sm_attrs in sm_files:
     smname = os.path.split(os.path.split(sm_fp)[0])[1]
     packname = os.path.split(os.path.split(os.path.split(sm_fp)[0])[0])[1]
-    out_dir = os.path.join(DS_OUT_DIR, packname)
+    # out_dir = os.path.join(DS_OUT_DIR, packname)
+    out_dir = DS_OUT_DIR
     if not os.path.exists(out_dir):
       os.makedirs(out_dir)
     out_json_fp = os.path.join(out_dir, '{}.json'.format(smname))

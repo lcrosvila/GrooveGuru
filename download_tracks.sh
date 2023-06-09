@@ -33,3 +33,5 @@ do
     # Remove the downloaded zip file
     rm "$filename"
 done
+
+rm -r /Users/lcros/Documents/GrooveGuru/dataset/Community\ Keyboard\ Megapack\ -\ Volume\ 4/\(GLoVE\)\ Eternal\ Nocturne
