@@ -1,3 +1,4 @@
 dataset/*
 *.zip
 __pycache__/
+*.md
