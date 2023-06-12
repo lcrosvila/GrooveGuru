@@ -21,7 +21,7 @@ Then parse the charts by running:
 python smdataset.py dataset dataset/parsed_files
 ```
 
-When checking the time increments between steps, we can see that for most tracks the minimum step is of 3ms (except for 8 tracks). If we remove those from the dataset we could parse the charts to have a step of 3ms, and use a sliding window of 3ms to preprocess the audio.
+When checking the time increments between steps, we can see that for most tracks the minimum step is of 3ms (except for 8 tracks). If we remove those from the dataset we could pad the charts to have a step of 3ms, and use a sliding window of 3ms to preprocess the audio.
 
 (TO DO) Train a new model with the new dataset, as now we have a better alignment between steps and time steps. The generated json files look something like this:
 
