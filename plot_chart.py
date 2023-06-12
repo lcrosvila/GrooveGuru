@@ -8,9 +8,33 @@ import numpy as np
 with open('dataset/parsed_files/!.json') as file:
     data = json.load(file)
 
+# %% Let's check the data
+
+# get all json files
+import os
+json_files = [pos_json for pos_json in os.listdir('dataset/parsed_files') if pos_json.endswith('.json')]
+
+files_lower_than_3ms = []
+min_time_increment = 1000
+for file in json_files:
+    data_aux = json.load(open('dataset/parsed_files/' + file))
+    for chart in data_aux['charts']:
+        time_values = [entry[0] for entry in chart['notes']]
+        
+        # check the minimum time increment
+        for i in range(1, len(time_values)):
+            time_increment = time_values[i] - time_values[i-1]
+            if time_increment < 0.003:
+                files_lower_than_3ms.append(file)
+            if time_increment < min_time_increment:
+                min_time_increment = time_increment
+
+print('Minimum time increment: {} s'.format(min_time_increment))
+print(files_lower_than_3ms)
+print(len(files_lower_than_3ms), len(json_files))
+# %% Pretty plots
 for chart in data['charts']:
     # Extract time and step values from the JSON data
-    time_values = [entry[0] for entry in chart['notes']]
     step_values = [entry[1] for entry in chart['notes']]
 
     # Convert the time values to float and step values to string
