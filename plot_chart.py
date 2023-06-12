@@ -32,6 +32,11 @@ for file in json_files:
 print('Minimum time increment: {} s'.format(min_time_increment))
 print(set(files_lower_than_3ms))
 print(len(set(files_lower_than_3ms)), len(json_files))
+
+# write the weird timing charts to a file
+with open('dataset/charts_to_ignore.txt', 'w') as file:
+    for item in set(files_lower_than_3ms):
+        file.write("%s\n" % item)
 # %% Pretty plots
 for chart in data['charts']:
     # Extract time and step values from the JSON data
