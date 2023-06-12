@@ -68,6 +68,9 @@ for file in json_files:
             json.dump(data, outfile)
 
     for chart in data['charts']:
+        # if npz file exists, continue
+        if os.path.exists('dataset/3ms_dataset/{}_{}_{}.npz'.format(file[:-5], chart['difficulty_coarse'], chart['difficulty_fine'])):
+            continue
         # get x and y
         stft, aligned_labels = get_X_y(audio_fp, chart)
         # save it in dataset/3ms_dataset as an npz file
