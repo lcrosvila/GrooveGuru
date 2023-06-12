@@ -30,8 +30,8 @@ for file in json_files:
                 min_time_increment = time_increment
 
 print('Minimum time increment: {} s'.format(min_time_increment))
-print(files_lower_than_3ms)
-print(len(files_lower_than_3ms), len(json_files))
+print(set(files_lower_than_3ms))
+print(len(set(files_lower_than_3ms)), len(json_files))
 # %% Pretty plots
 for chart in data['charts']:
     # Extract time and step values from the JSON data
