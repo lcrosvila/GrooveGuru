@@ -65,14 +65,14 @@ for file in json_files:
         data['music_fp'] = audio_fp
         with open('dataset/parsed_files/' + file, 'w') as outfile:
             json.dump(data, outfile)
-    
+
     audio, sr = librosa.load(audio_fp, sr=None)  # Load audio, sr=None to preserve original sample rate
     for chart in data['charts']:
         # if npz file exists, continue
-        if os.path.exists('dataset/3ms_dataset/{}_{}_{}.npz'.format(file[:-5], chart['difficulty_coarse'], chart['difficulty_fine'])):
+        if os.path.exists('dataset/3ms_dataset/{}_{}_{}_{}.npz'.format(file[:-5], chart['type'], chart['difficulty_coarse'], chart['difficulty_fine'])):
             continue
         # get x and y
         stft, aligned_labels = get_X_y(audio, sr, chart)
         # save it in dataset/3ms_dataset as an npz file
-        np.savez_compressed('dataset/3ms_dataset/{}_{}_{}.npz'.format(file[:-5], chart['difficulty_coarse'], chart['difficulty_fine']), x=stft, y=aligned_labels)
-        print('Saved {}_{}_{}.npz'.format(file[:-5], chart['difficulty_coarse'], chart['difficulty_fine']))
+        np.savez_compressed('dataset/3ms_dataset/{}_{}_{}_{}.npz'.format(file[:-5], chart['type'], chart['difficulty_coarse'], chart['difficulty_fine']), x=stft, y=aligned_labels)
+        print('Saved {}_{}_{}_{}.npz'.format(file[:-5], chart['type'], chart['difficulty_coarse'], chart['difficulty_fine']))
