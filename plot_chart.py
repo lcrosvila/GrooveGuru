@@ -40,12 +40,13 @@ with open('dataset/charts_to_ignore.txt', 'w') as file:
 # %% Pretty plots
 for chart in data['charts']:
     # Extract time and step values from the JSON data
+    time_values = [entry[0] for entry in chart['notes']]
     step_values = [entry[1] for entry in chart['notes']]
 
     # Convert the time values to float and step values to string
     time_values = list(map(float, time_values))
     step_values = list(map(str, step_values))
-
+    
     audio_data, sample_rate = sf.read(data['music_fp'])
     
     # Create a time axis for the audio waveform
