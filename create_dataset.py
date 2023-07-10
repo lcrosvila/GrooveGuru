@@ -13,6 +13,8 @@ def get_X_y(audio, sr, chart):
     # Compute the STFT of the audio signal
     hop_length = int(0.003 * sr)  # 3ms hop length
     stft = librosa.stft(audio, hop_length=hop_length)
+    # Compute the magnitude spectrogram
+    stft = np.abs(stft)
 
     # Convert time_values and step_values to STFT frames
     time_values = [entry[0] for entry in chart['notes']]
