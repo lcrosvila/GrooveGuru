@@ -2,9 +2,12 @@
 # This will take inspiration from: https://github.com/cpuguy96/StepCOVNet
 # Or maybe: https://github.com/guillefix/transflower-lightning
 
+import os
 import numpy as np
 
-data = np.load('dataset/3ms_dataset/XenomaX_dance-single_Hard_10.npz', allow_pickle=True)
+# get all the files from dataset/3ms_dataset/ that don't contain "double" in its name
+files = [file for file in os.listdir('dataset/3ms_dataset/') if not 'double' in file]
+data = np.load('dataset/3ms_dataset/' + files[0], allow_pickle=True)
 
 # %%
 def create_sliding_windows(x, y, window_size):
