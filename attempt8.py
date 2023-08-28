@@ -153,7 +153,10 @@ class RNNModel(nn.Module):
         self.lstm = nn.LSTM(mel_input_size + difficulty_size, hidden_size, bidirectional=True)
         
         # Linear layer to map LSTM output to classes
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        self.fc1 = nn.Linear(hidden_size * 2, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, num_classes)
+
     
     def forward(self, mel_input, difficulty):
         mel_input = mel_input.squeeze(dim=2)
@@ -173,7 +176,9 @@ class RNNModel(nn.Module):
         output = output.view(-1)
         
         # Fully connected layer
-        output = self.fc(output)
+        output = self.fc1(output)
+        output = self.relu(output)
+        output = self.fc2(output)
         
         return output
 
@@ -202,14 +207,14 @@ for epoch in range(8):
         optimizer.step()
 
         # print statistics
-        if i % 100 == 0:
+        if i % 500 == 0:
             print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, loss.item()))
 
 # %%
-idx = 0
-input_section = X[idx]
-# Forward pass
-output = model(input_section, difficulty[idx])
+for idx in range(50):
+    input_section = X[idx]
+    # Forward pass
+    output = model(input_section, difficulty[idx])
 
-# print the idx_to_vocabulary of the output
-print(idx_to_vocabulary[torch.argmax(output).item()], idx_to_vocabulary[y[idx][0].item()])
+    # print the idx_to_vocabulary of the output
+    print(idx_to_vocabulary[torch.argmax(output).item()], idx_to_vocabulary[y[idx][0].item()])
