@@ -29,4 +29,7 @@ When checking the time increments between steps, we can see that for most tracks
   ... "charts": [{"type": "dance-single", "desc_or_author": "K. Ward", "difficulty_coarse": "Easy", "difficulty_fine": 4, "notes": [[0.002, "0000"], [0.3890967741935484, "0000"], [0.7761935483870968, "0000"], [1.163290322580645, "0000"], [1.5503870967741935, "0000"], [1.937483870967742, "0000"], ...
 </sub>
 
+
 Which is super useful! I'm sure we can figure out a way to exploit that. But we'll have to rethink the model's architecture completely.
+
+Check out `plot_chart.ipynb` to get a better feeling of how the parsed files can be used.
