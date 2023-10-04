@@ -14,7 +14,7 @@ Welcome to the messy world of generating StepMania charts using (for the moment)
 
 ## Current version (version 8):
 You can download the data with 
-`download_tracks.sh`
+`download_tracks.sh` (2.34GB)
 
 Then parse the charts by running:
 ```
