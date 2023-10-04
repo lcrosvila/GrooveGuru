@@ -3,14 +3,14 @@
 Welcome to the messy world of generating StepMania charts using (for the moment) Transformers! 
 
 ## Previous version (version 7):
-Get the data from [DDR Classics](https://search.stepmaniaonline.net/pack/id/404)
+~~Get the data from [DDR Classics](https://search.stepmaniaonline.net/pack/id/404)
 
 Adapt the file `check_songs.py` to where you put the folder.
 
 Then run `attempt7.py`
 
 (it's a bit messy and requires tweaking, but it should kind of work)
-(also, it doesn't technically generate the whole .sm file, but rather it just gives you the steps)
+(also, it doesn't technically generate the whole .sm file, but rather it just gives you the steps)~~
 
 ## Current version (version 8):
 You can download the data with 
