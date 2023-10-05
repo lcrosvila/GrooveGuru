@@ -1,12 +1,17 @@
 import torch
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
 import math
-
-import torch
 from torch import nn
 from torch.nn import Transformer
 from torch.utils.data import dataset
 import torch.nn.functional as F
+import random
+import os
+import datetime
+import logging
+
 
 # fromhttps://pytorch.org/tutorials/beginner/transformer_tutorial.html 
 def get_positional_encoding(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
@@ -120,9 +125,52 @@ class Model(pl.LightningModule):
             optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
             return optimizer
     
+if __name__ == "__main__":
 
+    SEED = 0
+    torch.manual_seed(SEED)
+    pl.seed_everything(SEED)
+    random.seed(SEED)
 
-        
+    os.environ["WANDB_SILENT"] = "true"
 
+    BATCH_SIZE = 32
+    
+    trn_ds = DDSDataset(trn_data_tokenized,seq_len=SEQ_LEN)
+    val_ds = DDSDataset(val_data_tokenized,seq_len=SEQ_LEN)
 
+    trn_dl = torch.utils.data.DataLoader(trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
+    val_dl = torch.utils.data.DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
+    # use minimal precision
+
+    progress_bar_callback = RichProgressBar(refresh_rate=1)
+
+    model = Model()
+
+    wandb_logger = WandbLogger(log_model="all", project="llm_control")
+    # get name
+    name = wandb_logger.experiment.name
+
+    logger = logging.getLogger("wandb")
+    logger.setLevel(logging.ERROR)
+
+    trainer = pl.Trainer(accelerator="gpu",
+    devices=[6],
+    precision=16,
+    val_check_interval=100,
+    callbacks=[progress_bar_callback,
+            pl.callbacks.ModelCheckpoint(
+            dirpath=f"./checkpoints/{name}/",
+            monitor="val/loss",
+            mode="min",
+            save_top_k=3,
+            save_last=True,
+            filename="{epoch}-{step}-{val/loss:.2f}",
+            train_time_interval = datetime.timedelta(minutes=2),)],
+    logger=wandb_logger,
+    )
+
+    trainer.fit(model,
+     trn_dl,
+     val_dl)
