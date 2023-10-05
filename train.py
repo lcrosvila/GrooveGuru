@@ -13,7 +13,7 @@ import datetime
 import logging
 
 
-# fromhttps://pytorch.org/tutorials/beginner/transformer_tutorial.html 
+# from https://pytorch.org/tutorials/beginner/transformer_tutorial.html 
 def get_positional_encoding(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
     self.dropout = nn.Dropout(p=dropout)
     position = torch.arange(max_len).unsqueeze(1)
