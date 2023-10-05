@@ -8,7 +8,7 @@ import os
 import sys
 import traceback
 
-from abstime import calc_note_abs_times
+from legacy.abstime import calc_note_abs_times
 from parse import parse_sm_txt
 
 _ATTR_REQUIRED = ['title', 'offset', 'bpms', 'notes']
@@ -75,7 +75,7 @@ if __name__ == '__main__':
   OPTS = sys.argv[3:]
   GEN_PREVIEWS = 'genprevs' in OPTS
   if GEN_PREVIEWS:
-    from preview import write_preview_wav
+    from legacy.preview import write_preview_wav
   sm_files = find_and_parse_sm_files(SM_DIR)
   avg_difficulty = 0.0
   num_charts = 0
