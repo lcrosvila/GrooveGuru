@@ -22,11 +22,13 @@ for f in glob.glob("./GrooveGuru/dataset/*/*/*.sm"):
 
     with open(f,'r') as c:
         chart = c.read()
+        path = '/'.join(f.split('/')[:-1])
+        chart = '#PATH:' + path + '/;\n' + chart
         charts.append(chart)
 
 
 all_items = []
-keys = ['#ARTIST', '#ARTISTTRANSLIT', '#ATTACKS', '#BACKGROUND', '#BANNER', '#BGCHANGES', '#BGCHANGES2', '#BPMS', '#CDTITLE', '#CREDIT', '#DISPLAYBPM', '#GENRE', '#KEYSOUNDS', '#LYRICSPATH', '#MUSIC', '#MUSICBYTES', '#MUSICLENGTH', '#OFFSET', '#SAMPLELENGTH', '#SAMPLESTART', '#SELECTABLE', '#STOPS', '#SUBTITLE', '#SUBTITLETRANSLIT', '#TITLE', '#TITLETRANSLIT']
+keys = ['#PATH', '#ARTIST', '#ARTISTTRANSLIT', '#ATTACKS', '#BACKGROUND', '#BANNER', '#BGCHANGES', '#BGCHANGES2', '#BPMS', '#CDTITLE', '#CREDIT', '#DISPLAYBPM', '#GENRE', '#KEYSOUNDS', '#LYRICSPATH', '#MUSIC', '#MUSICBYTES', '#MUSICLENGTH', '#OFFSET', '#SAMPLELENGTH', '#SAMPLESTART', '#SELECTABLE', '#STOPS', '#SUBTITLE', '#SUBTITLETRANSLIT', '#TITLE', '#TITLETRANSLIT']
 
 print('Extracting Song Metadata')
 for chart in tqdm(charts):
@@ -77,7 +79,6 @@ for chart in tqdm(charts):
         except Exception as e:
             # print(e)
             print('>>>', item['#TITLE'])
-            print('>>> NO #NOTES:',NOTES)
             continue
         # print('index of notes:', idx)
         item['NOTES_type'].append(elements[idx+1].strip())
@@ -87,6 +88,10 @@ for chart in tqdm(charts):
         item['NOTES_radar'].append(elements[idx+5].strip())
         item['NOTES'].append(elements[idx+6:])
 
+    if len(item) > 33:
+        print('>>>', item['#TITLE'], item['#MUSIC'])
+        print('>>> TOO MANY ELEMENTS',len(item))
+        continue
     # item['NOTES'] = NOTES
     all_items.append(item)
 
@@ -154,4 +159,4 @@ df = df.with_columns(pl.Series(name="NOTES_preproc", values=preprocessed_charts)
 # print(df.head(5))
 
 print('Saving JSON file')
-df.write_json('./DDR_dataset.json')
+df.write_json('./GrooveGuru/dataset/DDR_dataset.json')
