@@ -40,7 +40,7 @@ def process_audio(audio_path, bpm, offset, calculate_beat=False):
         bpm = estimated_bpm
     
     # compute stft
-    n_fft = 2048
+    n_fft = 64
 
     hop_length = int(np.ceil((60 / bpm) * (4 / 96) * sr))
     # print('hop length:', hop_length)
@@ -60,7 +60,7 @@ df = pl.read_json('dataset/DDR_dataset.json')
 df = df.with_columns(pl.Series(name="SPECTROGRAM", values=['']*len(df)))
 
 for row in tqdm(df.iter_rows(named=True)):
-    if not (row['#DISPLAYBPM'] == '' or row['#DISPLAYBPM'] == '*'):
+    if not (row['#DISPLAYBPM'] == '' or row['#DISPLAYBPM'] == '*' or row['#DISPLAYBPM'] == '0.000'):
         bpm = float(row['#DISPLAYBPM'])
     else:
         if ',' in row['#BPMS']:
@@ -79,6 +79,17 @@ for row in tqdm(df.iter_rows(named=True)):
                 audio_path = row['#PATH'] + f
                 break
         # otherwise skip
+        continue
+
+    # if both mp3 and ogg exist, take mp3
+    if audio_path.endswith('.ogg'):
+        audio_path = audio_path[:-3] + 'mp3'
+        if not os.path.exists(audio_path):
+            continue
+
+    # check if npy file already exists
+    if os.path.exists(audio_path[:-3] + 'npy'):
+        row['SPECTROGRAM'] = audio_path[:-3] + 'npy'
         continue
 
     S = process_audio(audio_path, bpm, offset, calculate_beat=False)
