@@ -32,7 +32,7 @@ class Model(pl.LightningModule):
         self.save_hyperparameters()
         self.positional_encoding = get_positional_encoding(d_model, dropout=0.1,max_len=seq_len)
         self.chart_embedding = nn.Embedding(vocab_size, d_model)
-        self.audio_embedding = nn.Linear(128, d_model)
+        self.audio_embedding = nn.Linear(audio_ft_size, d_model)
 
         self.transformer = Transformer(d_model=d_model, nhead=nheads, num_encoder_layers=n_encoder_layers, num_decoder_layers=n_decoder_layers, dim_feedforward=dim_ff, dropout=0.1)
   
