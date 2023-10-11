@@ -24,7 +24,7 @@ def get_positional_encoding(self, d_model: int, dropout: float = 0.1, max_len: i
     return pe
 
 class Model(pl.LightningModule):
-    def __init__(self,  audio_ft_size, vocab_size, seq_len, metadata_len, d_model, dim_ff, nheads, n_encoder_layers, n_decoder_layers):
+    def __init__(self,  input_ft_size, output_ft_size, vocab_size, max_seq_len, metadata_len, d_model, dim_ff, nheads, n_encoder_layers, n_decoder_layers):
         ''' 
         seq_len: length of chart sequence (equal or longer to audio sequence)
         '''
@@ -33,7 +33,6 @@ class Model(pl.LightningModule):
         self.positional_encoding = get_positional_encoding(d_model, dropout=0.1,max_len=seq_len)
         self.chart_embedding = nn.Embedding(vocab_size, d_model)
         self.audio_embedding = nn.Linear(128, d_model)
-
         self.transformer = Transformer(d_model=d_model, nhead=nheads, num_encoder_layers=n_encoder_layers, num_decoder_layers=n_decoder_layers, dim_feedforward=dim_ff, dropout=0.1)
   
         self.output_layer = nn.Linear(d_model, 1)
@@ -120,11 +119,6 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
     
-        
-    def configure_optimizers(self):
-            optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-            return optimizer
-    
 if __name__ == "__main__":
 
     SEED = 0
@@ -142,8 +136,6 @@ if __name__ == "__main__":
     trn_dl = torch.utils.data.DataLoader(trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     val_dl = torch.utils.data.DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
-    # use minimal precision
-
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     model = Model()
@@ -155,7 +147,8 @@ if __name__ == "__main__":
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
 
-    trainer = pl.Trainer(accelerator="gpu",
+    trainer = pl.Trainer(
+    accelerator="gpu",
     devices=[6],
     precision=16,
     val_check_interval=100,
