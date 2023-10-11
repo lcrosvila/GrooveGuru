@@ -9,6 +9,8 @@ def process_audio(audio_path, bpm, offset, calculate_beat=False):
     # load audio
     y, sr = librosa.load(audio_path, sr=None)
 
+    offset = -offset
+
     # if offset is negative, add silence to the beginning
     if offset < 0:
         y = np.concatenate((np.zeros(int(-offset * sr)), y))
@@ -62,12 +64,10 @@ for row in tqdm(df.iter_rows(named=True)):
         bpm = float(row['#DISPLAYBPM'])
     else:
         if ',' in row['#BPMS']:
-            bpms = [b.split('=') for b in row['#BPMS'].split(',')]
-            # flatten
-            bpms = [float(b) for sublist in bpms for b in sublist]
-            bpm = max(bpms)
+            continue
         else:
             bpm = float(row['#BPMS'].split('=')[-1][:-1])
+            
     offset = float(row['#OFFSET'])
     audio_path = row['#PATH'] + row['#MUSIC']
 

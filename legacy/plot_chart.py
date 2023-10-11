@@ -5,19 +5,19 @@ import soundfile as sf
 import numpy as np
 
 # Read the JSON file
-with open('dataset/parsed_files/!.json') as file:
+with open('/Users/lcros/Documents/GrooveGuru/dataset/parsed_files/War Game.json') as file:
     data = json.load(file)
 
 # %% Let's check the data
 
 # get all json files
 import os
-json_files = [pos_json for pos_json in os.listdir('dataset/parsed_files') if pos_json.endswith('.json')]
+json_files = [pos_json for pos_json in os.listdir('/Users/lcros/Documents/GrooveGuru/dataset/parsed_files') if pos_json.endswith('.json')]
 
 files_lower_than_3ms = []
 min_time_increment = 1000
 for file in json_files:
-    data_aux = json.load(open('dataset/parsed_files/' + file))
+    data_aux = json.load(open('/Users/lcros/Documents/GrooveGuru/dataset/parsed_files/' + file))
     for chart in data_aux['charts']:
         time_values = [entry[0] for entry in chart['notes']]
         
@@ -34,7 +34,7 @@ print(set(files_lower_than_3ms))
 print(len(set(files_lower_than_3ms)), len(json_files))
 
 # write the weird timing charts to a file
-with open('dataset/charts_to_ignore.txt', 'w') as file:
+with open('/Users/lcros/Documents/GrooveGuru/dataset/charts_to_ignore.txt', 'w') as file:
     for item in set(files_lower_than_3ms):
         file.write("%s\n" % item)
 
@@ -97,7 +97,7 @@ for chart in data['charts']:
     audio_time = np.linspace(0, audio_duration, len(audio_data))
 
     # Create the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(30, 20))
 
     # Plot the audio waveform as the background
     ax.plot(audio_time, audio_data, color='lightgray', linewidth=0.5, zorder=1)
@@ -114,3 +114,11 @@ for chart in data['charts']:
     ax.grid(True)
 
     plt.show()
+
+# %%
+# print length of the audio file in seconds
+audio_data, sample_rate = sf.read(data['music_fp'])
+audio_duration = len(audio_data) / sample_rate
+print('Audio duration: {} s'.format(audio_duration))
+# print seconds of the last step
+print('Last step: {} s'.format(time_values[-1]))
