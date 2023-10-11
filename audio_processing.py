@@ -58,12 +58,22 @@ df = pl.read_json('dataset/DDR_dataset.json')
 
 # initialize new column
 df = df.with_columns(pl.Series(name="SPECTROGRAM", values=['']*len(df)))
+df = df.with_columns(pl.Series(name="bpm_counts", values=df['#BPMS'].map_elements(lambda x: len(x.split(','))))) 
+df.filter(pl.col('bpm_counts') == 1)
 
+# create a npy_files folder
+if not os.path.exists('dataset/npy_files'):
+    os.mkdir('dataset/npy_files')
+
+# %%
+count = 0
+specs = []
 for row in tqdm(df.iter_rows(named=True)):
     if not (row['#DISPLAYBPM'] == '' or row['#DISPLAYBPM'] == '*' or row['#DISPLAYBPM'] == '0.000'):
         bpm = float(row['#DISPLAYBPM'])
     else:
         if ',' in row['#BPMS']:
+            specs.append(None)
             continue
         else:
             bpm = float(row['#BPMS'].split('=')[-1][:-1])
@@ -71,6 +81,8 @@ for row in tqdm(df.iter_rows(named=True)):
     offset = float(row['#OFFSET'])
     audio_path = row['#PATH'] + row['#MUSIC']
 
+    if 'v.mp3' in audio_path or 'V.mp3' in audio_path:
+        print('Careful!')
     if not os.path.exists(audio_path):
         # try to see if there is an .ogg or .mp3 file in the same folder
         files_in_folder = os.listdir(row['#PATH'])
@@ -79,22 +91,58 @@ for row in tqdm(df.iter_rows(named=True)):
                 audio_path = row['#PATH'] + f
                 break
         # otherwise skip
+        specs.append(None)
         continue
 
-    # if both mp3 and ogg exist, take mp3
-    if audio_path.endswith('.ogg'):
-        audio_path = audio_path[:-3] + 'mp3'
-        if not os.path.exists(audio_path):
-            continue
+    if 'Exotica.ogg' in audio_path or "It's Over Now.ogg" in audio_path or "Hyper Hyper.ogg" in audio_path or "Land of the Rising Sun (Diskowarp Mix).ogg" in audio_path or "Who.ogg" in audio_path or "Take My Time.ogg" in audio_path:
+        specs.append(None)
+        continue
+
+    if not os.path.exists(audio_path):
+        count += 1
+        print('ERROR', audio_path)
+        specs.append(None)
+        continue
 
     # check if npy file already exists
-    if os.path.exists(audio_path[:-3] + 'npy'):
-        row['SPECTROGRAM'] = audio_path[:-3] + 'npy'
+    if os.path.isfile('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'):
+        # row['SPECTROGRAM'] = './dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'
+        specs.append('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy')
         continue
 
     S = process_audio(audio_path, bpm, offset, calculate_beat=False)
-    np.save(audio_path[:-3] + 'npy', S)
+    # np.save(audio_path[:-3] + 'npy', S)
+    np.save('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy', S)
 
-    row['SPECTROGRAM'] = audio_path[:-3] + 'npy'
+    specs.append('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy')
+    # row['SPECTROGRAM'] = './dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'
 
+df = df.with_columns(pl.Series(name="SPECTROGRAM", values=specs)) 
 df.write_json('dataset/DDR_dataset.json')
+
+# %%
+from sklearn.model_selection import train_test_split
+
+# remove './dataset/npy_files/V.npy' from df in SPECTROGRAM column
+df = df.filter(pl.col('SPECTROGRAM') != './dataset/npy_files/V.npy')
+
+# %%
+# split dataframe according to unique spectrograms (i.e. unique audio files)
+
+df_unique = df['SPECTROGRAM'].unique().drop_nulls()
+print(df_unique)
+
+# # split into train and test
+train_df, test_df = train_test_split(df_unique, test_size=0.1, random_state=0)
+
+print('Train size:', len(train_df))
+print('Test size:', len(test_df))
+
+# save train and test spectrograms to txt files
+with open('dataset/train.txt', 'w') as f:
+    for item in train_df.to_list():
+        f.write("%s\n" % item)
+
+with open('dataset/dev.txt', 'w') as f:
+    for item in test_df.to_list():
+        f.write("%s\n" % item)
