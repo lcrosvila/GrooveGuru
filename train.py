@@ -24,19 +24,19 @@ def get_positional_encoding(self, d_model: int, dropout: float = 0.1, max_len: i
     return pe
 
 class Model(pl.LightningModule):
-    def __init__(self,  input_ft_size, output_ft_size, vocab_size, max_seq_len, metadata_len, d_model, dim_ff, nheads, n_encoder_layers, n_decoder_layers):
+    def __init__(self, nheads, n_encoder_layers, encoder_ft_size, hidden_size, feed_forward_size, n_decoder_layers, decoder_vocab_size, decoder_ft_size, decoder_hidden_size, decoder_ff_size ):
         ''' 
         seq_len: length of chart sequence (equal or longer to audio sequence)
         '''
         super().__init__()
         self.save_hyperparameters()
-        self.positional_encoding = get_positional_encoding(d_model, dropout=0.1,max_len=seq_len)
-        self.chart_embedding = nn.Embedding(vocab_size, d_model)
-        self.audio_embedding = nn.Linear(128, d_model)
-        self.transformer = Transformer(d_model=d_model, nhead=nheads, num_encoder_layers=n_encoder_layers, num_decoder_layers=n_decoder_layers, dim_feedforward=dim_ff, dropout=0.1)
+        self.positional_encoding = get_positional_encoding(hidden_size, dropout=0.1)
+        self.chart_embedding = nn.Embedding(decoder_vocab_size, decoder_ft_size)
+        self.audio_embedding = nn.Linear(128, encoder_ft_size)
+        self.transformer = Transformer(d_model=hidden_size, nhead=nheads, num_encoder_layers=n_encoder_layers, num_decoder_layers=n_decoder_layers, dim_feedforward=feed_forward_size, dropout=0.1)
   
         self.output_layer = nn.Linear(d_model, 1)
-        self.metadata_len = metadata_len
+        self.max_seq_len = max_seq_len
 
     def forward(self, x, y):
         '''
@@ -70,9 +70,10 @@ class Model(pl.LightningModule):
     
      
     def step(self, batch, batch_idx):
-        x = batch
-        y = x[:, 1:]
-        y_hat = self(x)[:, :-1]
+        encoder_input, decoder_ft = batch
+        decoder_input = decoder_ft[:, :-1]
+        decoder_output = decoder_ft[:, 1:]
+        decoder_output_logits = self(encoder_input, decoder_input)
 
         ce = F.cross_entropy(y_hat.reshape(-1,self.tokenizer.vocab_size), y.reshape(-1))
         metrics["cross_entropy"] = ce

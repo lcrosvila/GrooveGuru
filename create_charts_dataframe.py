@@ -9,12 +9,12 @@ print('-'*50)
 
 charts = []
 
-with open('./GrooveGuru/dataset/charts_to_ignore.txt') as ignore:
+with open('./dataset/charts_to_ignore.txt') as ignore:
     ignore = ignore.readlines()
     ignore = [line.split('.')[0] for line in ignore]
     # print(ignore)
 
-for f in glob.glob("./GrooveGuru/dataset/*/*/*.sm"):
+for f in glob.glob("./dataset/*/*/*.sm"):
     # print(f.split('/'))
     if f.split('/')[-2] in ignore:
         print('>>> IGNORING CHART:', f)
@@ -159,4 +159,4 @@ df = df.with_columns(pl.Series(name="NOTES_preproc", values=preprocessed_charts)
 # print(df.head(5))
 
 print('Saving JSON file')
-df.write_json('./GrooveGuru/dataset/DDR_dataset.json')
+df.write_json('./dataset/DDR_dataset.json')
