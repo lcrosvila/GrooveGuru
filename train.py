@@ -24,38 +24,35 @@ def get_positional_encoding(self, d_model: int, dropout: float = 0.1, max_len: i
     return pe
 
 class Model(pl.LightningModule):
-    def __init__(self, nheads, n_encoder_layers, encoder_ft_size, hidden_size, feed_forward_size, n_decoder_layers, decoder_vocab_size, decoder_ft_size, decoder_hidden_size, decoder_ff_size ):
+    def __init__(self, nheads, hidden_size, feed_forward_size, n_encoder_layers, n_decoder_layers, decoder_vocab_size, encoder_ft_size, max_seq_len):
         ''' 
         seq_len: length of chart sequence (equal or longer to audio sequence)
         '''
         super().__init__()
         self.save_hyperparameters()
-        self.positional_encoding = get_positional_encoding(hidden_size, dropout=0.1)
-        self.chart_embedding = nn.Embedding(decoder_vocab_size, decoder_ft_size)
-        self.audio_embedding = nn.Linear(128, encoder_ft_size)
+        self.positional_encoding = get_positional_encoding(hidden_size, dropout=0.1,max_len=max_seq_len)
+        self.decoder_embedding = nn.Embedding(decoder_vocab_size, hidden_size)
+        self.encoder_embedding = nn.Linear(encoder_ft_size, hidden_size)
         self.transformer = Transformer(d_model=hidden_size, nhead=nheads, num_encoder_layers=n_encoder_layers, num_decoder_layers=n_decoder_layers, dim_feedforward=feed_forward_size, dropout=0.1)
-  
-        self.output_layer = nn.Linear(d_model, 1)
-        self.max_seq_len = max_seq_len
+        self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
 
-    def forward(self, x, y):
+    def forward(self, encoder_fts, decoder_tokens):
         '''
-        x: (batch_size, seq_len, hidden_size), Audio features
-        y: (batch_size, seq_len, hidden_size), Chart tokens
+        encoder_ft: (batch_size, encoder_seq_len, encoder_ft_size)
+        decoder_tokens: (batch_size, decoder_seq_len, 1)
         '''
-        # embed audio features
-        zx = self.audio_embedding(x)
+        # embed encoder features
+        ze = self.encoder_embedding(encoder_fts)
         # add positional encoding
-        zx = zx + self.positional_encoding
-        # embed chart tokens
-        # add positional encoding to chart tokens
-        zy = self.chart_embedding(y)
-        # add positional encoding
-        zy[:,self.metadata_len:] = zy[:,self.metadata_len:] + self.positional_encoding
+        ze = ze + self.positional_encoding[:, :ze.shape[1], :]
+        # embed decoder tokens
+        zd = self.decoder_embedding(decoder_tokens)
+        zd = zd + self.positional_encoding[:, :zd.shape[1], :]
+
         # pass through transformer
-        zl = self.transformer(zx, zy, tgt_is_causal=True)
-        logits = self.output_layer(zl)
-        return logits
+        zl = self.transformer(ze,zd, tgt_is_causal=True)
+        decoder_logits = self.decoder_output_layer(zl)
+        return decoder_logits
     
     def step(self, batch, batch_idx):
         '''
@@ -70,29 +67,25 @@ class Model(pl.LightningModule):
     
      
     def step(self, batch, batch_idx):
-        encoder_input, decoder_ft = batch
-        decoder_input = decoder_ft[:, :-1]
-        decoder_output = decoder_ft[:, 1:]
-        decoder_output_logits = self(encoder_input, decoder_input)
+        encoder_ft, decoder_tokens = batch
+        decoder_output_logits = self(encoder_ft, decoder_tokens)
+        
+        decoder_output_tokens = decoder_tokens[:, 1:]
+        decoder_output_logits = decoder_output_logits[:, :-1]
 
-        ce = F.cross_entropy(y_hat.reshape(-1,self.tokenizer.vocab_size), y.reshape(-1))
+        ce = F.cross_entropy(decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]), decoder_output_tokens.reshape(-1))
         metrics["cross_entropy"] = ce
         metrics = {}
+        # TODO: check that this code is correct
         with torch.no_grad():
             # get probability of the correct token
-            y_hat_probs = F.softmax(y_hat, dim=-1)
-            probability =  torch.gather(y_hat_probs, dim=-1, index=y.unsqueeze(-1))
+            decoder_output_probs = F.softmax(decoder_output_logits, dim=-1)
+            probability =  torch.gather(decoder_output_probs, dim=-1, index=decoder_output_tokens.unsqueeze(-1)).squeeze(-1)
             metrics["probability"] = probability.mean()
-            # compute entropy
-            entropy = -(y_hat_probs * torch.log(y_hat_probs)).sum(dim=-1)
-            metrics["entropy"] = entropy.mean()
-            # compute perplexity
-            metrics["perplexity"] = (2**entropy).mean()
-
             # sort yhat by probability
-            y_hat_sort = torch.argsort(y_hat_probs, dim=-1, descending=True)
+            decoder_output_probs_sort = torch.argsort(decoder_output_probs, dim=-1, descending=True)
             for k in [1,2,4]:
-                metrics[f"accuracy@{k}"] = (y.unsqueeze(-1) == y_hat_sort[:, :, :k]).any(dim=-1).float().mean()
+                metrics[f"accuracy@{k}"] = (decoder_output_tokens.unsqueeze(-1) == decoder_output_probs_sort[:, :, :k]).any(dim=-1).float().mean()
         return metrics
    
     def training_step(self, batch, batch_idx):
