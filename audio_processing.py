@@ -84,6 +84,6 @@ for row in tqdm(df.iter_rows(named=True)):
     S = process_audio(audio_path, bpm, offset, calculate_beat=False)
     np.save(audio_path[:-3] + 'npy', S)
 
-    row['#SPECTROGRAM'] = audio_path[:-3] + 'npy'
+    row['SPECTROGRAM'] = audio_path[:-3] + 'npy'
 
 df.write_json('dataset/DDR_dataset.json')
