@@ -1,1 +1,8 @@
 rich
+torch
+polars
+pytorch-lightning
+matplotlib
+seaborn
+librosa
+scikit-learn

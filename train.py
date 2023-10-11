@@ -11,6 +11,8 @@ import random
 import os
 import datetime
 import logging
+import polars
+import numpy as np
 
 
 # from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
@@ -73,16 +75,20 @@ class Model(pl.LightningModule):
         zl = self.transformer(ze, zd)
         decoder_logits = self.decoder_output_layer(zl)
         return decoder_logits
-    
-    def generate(self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=1000):
+
+    def generate(
+        self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=1000
+    ):
         """
         Does not use KV caching so it's slow
         """
         while decoder_prompt_tokens.shape[1] < max_len:
             decoder_logits = self(encoder_fts, decoder_prompt_tokens)[:, -1, :]
-            decoder_probs = F.softmax(decoder_logits/temperature, dim=-1)
+            decoder_probs = F.softmax(decoder_logits / temperature, dim=-1)
             sampled_token = torch.multinomial(decoder_probs, num_samples=1)
-            decoder_prompt_tokens = torch.cat([decoder_prompt_tokens, sampled_token], dim=-1)
+            decoder_prompt_tokens = torch.cat(
+                [decoder_prompt_tokens, sampled_token], dim=-1
+            )
         return decoder_prompt_tokens
 
     def step(self, batch, batch_idx):
@@ -133,7 +139,9 @@ class Model(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         if batch_idx == 0:
-            generated = self.generate(batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50)
+            generated = self.generate(
+                batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50
+            )
             print(generated)
         with torch.no_grad():
             metrics = self.step(batch, batch_idx)
@@ -142,7 +150,6 @@ class Model(pl.LightningModule):
         loss = metrics["cross_entropy"]
         self.log("val/loss", loss, prog_bar=True)
         return loss
-
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
@@ -158,29 +165,82 @@ if __name__ == "__main__":
 
     BATCH_SIZE = 32
 
-    seq_len = 1000
+    seq_len = 5000
     audio_ft_size = 512
     n_tokens = 100
 
-    class MockDataset(torch.utils.data.Dataset):
-        def __init__(self, n, audio_ft_size, n_tokens, seq_len):
-            self.audio_ft_size = audio_ft_size
-            self.n_tokens = n_tokens
+    class ChartTokenizer():
+        def __init__(self, all_charts):
+            all_charts_tokens = [chart.split("\n") for chart in all_charts]
+            all_charts_flat = [item for sublist in all_charts_tokens for item in sublist]
+            all_tokens = list(set(all_charts_flat))
+            # sort 
+            all_tokens = sorted(all_tokens)
+            self.token_to_idx = {token: idx for idx, token in enumerate(all_tokens)}
+            self.idx_to_token = all_tokens
+
+        def transform(self, chart):
+            chart_tokens = chart.split("\n")
+            chart_tokens_idx = [self.token_to_idx[token] for token in chart_tokens]
+            return chart_tokens_idx
+    
+    class DDRDataset(torch.utils.data.Dataset):
+        def __init__(self, df_path, split_spectrogram_filenames_txt):
             self.seq_len = seq_len
-            self.n = n
-            pass
+            # read df json with polars
+            self.df = polars.read_json(df_path)
+
+            split_spectrogram_filenames = set(open(split_spectrogram_filenames_txt).read().split("\n"))
+            # filter out charts that are not in split_spectrogram_filenames
+            self.df = self.df[self.df["SPECTROGRAM"].isin(split_spectrogram_filenames)]
+
+            self.df["chart_tokens"] = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iterrows()]
+            self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
+            self.chart_token_idx = [self.tokenizer.transform(chart) for chart in self.df["chart_tokens"].to_list()] 
+
+            # TODO: don't store copies of the spectrograms that belong to the same chart
+            self.song_title2audio_ft =  {row["#TITLE"]: np.load(row["SPECTROGRAM"]) for row in self.df.drop_duplicates(subset=["#TITLE"]).iterrows()}
+
+            # find longest chart
+            max_chart_len = max([len(chart) for chart in self.chart_token_idx])
+            # pad all charts to the same length
+            self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_chart_len - len(chart)) for chart in self.chart_token_idx]
+
+            # find longest audio ft
+            max_audio_ft_len = max([audio_ft.shape[0] for audio_ft in self.song_title2audio_ft.values()])
+            # audio has shape (audio_seq_len, audio_ft_size)
+            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, max_audio_ft_len - audio_ft.shape[0]), np.zeros(audio_ft.shape[1:])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
 
         def __len__(self):
-            return self.n
+            return len(self.df)
 
         def __getitem__(self, idx):
             return {
-                "audio_fts":torch.randn(self.seq_len, self.audio_ft_size),
-                "chart_tokens":torch.randint(0, self.n_tokens, (self.seq_len,)),
+                "audio_fts": torch.tensor(self.song_title2audio_ft[self.df[idx]["#TITLE"]]),
+                "chart_tokens": torch.tensor(self.df[idx]["chart_token_idxs"]),
             }
 
-    trn_ds = MockDataset(n=256*100, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
-    val_ds = MockDataset(n=256, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
+    # class MockDataset(torch.utils.data.Dataset):
+    #     def __init__(self, n, audio_ft_size, n_tokens, seq_len):
+    #         self.audio_ft_size = audio_ft_size
+    #         self.n_tokens = n_tokens
+    #         self.seq_len = seq_len
+    #         self.n = n
+    #         pass
+
+    #     def __len__(self):
+    #         return self.n
+
+    #     def __getitem__(self, idx):
+    #         return {
+    #             "audio_fts": torch.randn(self.seq_len, self.audio_ft_size),
+    #             "chart_tokens": torch.randint(0, self.n_tokens, (self.seq_len,)),
+    #         }
+
+    # trn_ds = MockDataset(n=256 * 100, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
+    # val_ds = MockDataset(n=256, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
+
+    dev_ds = 
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2
