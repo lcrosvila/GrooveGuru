@@ -16,6 +16,9 @@ urls=(
     "https://search.stepmaniaonline.net/static/new/Keyboard%20Mega%20Pack%201.zip"
     "https://search.stepmaniaonline.net/static/new/Keyboard%20Mega%20Pack%201%C2%BD.zip"
     "https://search.stepmaniaonline.net/static/new/Keyboard%20Mega%20Pack%202.zip"
+    "https://search.stepmaniaonline.net/static/new/Tsunamix%20III%20[SM5].zip"
+    "https://search.stepmaniaonline.net/static/new/Fraxtil's%20Arrow%20Arrangements%20[ITG].zip"
+    "https://search.stepmaniaonline.net/static/new/Fraxtil's%20Beast%20Beats%20[ITG].zip"
 )
 
 # Iterate over the URLs
