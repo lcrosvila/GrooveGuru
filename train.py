@@ -144,7 +144,6 @@ class Model(pl.LightningModule):
             generated = self.generate(
                 batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50
             )
-            print(generated)
         with torch.no_grad():
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
@@ -165,12 +164,6 @@ if __name__ == "__main__":
 
     # os.environ["WANDB_SILENT"] = "true"
 
-    BATCH_SIZE = 32
-
-    seq_len = 5000
-    audio_ft_size = 512
-    n_tokens = 100
-
     class ChartTokenizer():
         def __init__(self, all_charts):
             all_charts_tokens = [chart.split("\n") for chart in all_charts]
@@ -188,15 +181,16 @@ if __name__ == "__main__":
     
     class DDRDataset(torch.utils.data.Dataset):
         def __init__(self, df_path, split_spectrogram_filenames_txt):
-            self.seq_len = seq_len
             # read df json with polars
             self.df = polars.read_json(df_path)
 
             split_spectrogram_filenames = set(open(split_spectrogram_filenames_txt).read().split("\n"))
+            # remove empty string
+            split_spectrogram_filenames = split_spectrogram_filenames - {''}
             # filter out charts that are not in split_spectrogram_filenames
             self.df = self.df.filter(self.df['SPECTROGRAM'].is_in(split_spectrogram_filenames))
-            # SANITY CHECK: print the length of the new df that have unique SPECROGRAM filenames
-            # print(len(set(self.df['SPECTROGRAM'])), len(split_spectrogram_filenames) - 1)
+            # SANITY CHECK: check if the resulting set(self.df['SPECTROGRAM']) is the same as split_spectrogram_filenames
+            # print(set(self.df['SPECTROGRAM']) == split_spectrogram_filenames)
 
             chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
             self.df = self.df.with_columns(polars.Series(name="chart_tokens", values=chart_tokens)) 
@@ -204,39 +198,71 @@ if __name__ == "__main__":
             self.chart_token_idx = [self.tokenizer.transform(chart) for chart in self.df["chart_tokens"].to_list()] 
 
             # TODO: don't store copies of the spectrograms that belong to the same chart
+            # self.song_title2audio_ft = {
+            #     row["SPECTROGRAM"]: np.load(row["SPECTROGRAM"])
+            #     for row in self.df.filter(self.df['SPECTROGRAM'].is_duplicated()).iter_rows(named=True)
+            # }
             self.song_title2audio_ft = {
-                row["#TITLE"]: np.load(row["SPECTROGRAM"])
-                for row in self.df.filter(self.df['#TITLE'].is_duplicated()).iter_rows(named=True)
+                spec: np.load(spec)
+                for spec in split_spectrogram_filenames
             }
             # SANITY CHECK: print the length of the song_title2audio_ft dict
             # print(len(self.song_title2audio_ft))
 
-            # find longest chart
+            # find longest chart and audio
             max_chart_len = max([len(chart) for chart in self.chart_token_idx])
-            # pad all charts to the same length
-            self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_chart_len - len(chart)) for chart in self.chart_token_idx]
-
-            # find longest audio ft
             max_audio_seq_len = max([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
 
+            max_len = max(max_chart_len, max_audio_seq_len)
+
+            # pad all charts to the same length
+            self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_len - len(chart)) for chart in self.chart_token_idx]
+
             # audio has shape (audio_ft_size, audio_seq_len), pad to (audio_ft_size, max_audio_seq_len)
-            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, 0), (0, max_audio_seq_len - audio_ft.shape[1])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
+            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, 0), (0, max_len - audio_ft.shape[1])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
             # SANITY CHECK: print the shape of the first and second audio ft
             # print(list(self.song_title2audio_ft.values())[0].shape, list(self.song_title2audio_ft.values())[1].shape)
+
+            self.seq_len = max_len
+            self.audio_ft_size = list(self.song_title2audio_ft.values())[0].shape[0]
+            self.n_tokens = len(self.tokenizer.token_to_idx)
 
         def __len__(self):
             return len(self.df)
 
         def __getitem__(self, idx):
-            title = self.df.row(idx, named=True)["#TITLE"]
+            title = self.df.row(idx, named=True)["SPECTROGRAM"]
+            audio_fts = torch.tensor(self.song_title2audio_ft[title], dtype=torch.float32) # (audio_ft_size, audio_seq_len)
             return {
-                "audio_fts": torch.tensor(self.song_title2audio_ft[title]),
+                "audio_fts": audio_fts.T, # (audio_seq_len, audio_ft_size)
                 "chart_tokens": torch.tensor(self.chart_token_idx[idx]),
             }
 
+    # class MockDataset(torch.utils.data.Dataset):
+    #     def __init__(self, n, audio_ft_size, n_tokens, seq_len):
+    #         self.audio_ft_size = audio_ft_size
+    #         self.n_tokens = n_tokens
+    #         self.seq_len = seq_len
+    #         self.n = n
+    #         pass
+
+    #     def __len__(self):
+    #         return self.n
+
+    #     def __getitem__(self, idx):
+    #         return {
+    #             "audio_fts": torch.randn(self.seq_len, self.audio_ft_size),
+    #             "chart_tokens": torch.randint(0, self.n_tokens, (self.seq_len,)),
+    #         }
 
     df_path = "./dataset/DDR_dataset.json"
     dev_ds = DDRDataset(df_path,"./dataset/dev.txt")
+
+    BATCH_SIZE = 32
+
+    seq_len = dev_ds.seq_len
+    audio_ft_size = dev_ds.audio_ft_size
+    n_tokens = dev_ds.n_tokens
 
     trn_ds, val_ds = torch.utils.data.random_split(dev_ds, [len(dev_ds) - 100, 100])
 
@@ -272,7 +298,7 @@ if __name__ == "__main__":
         accelerator="gpu",
         devices=[0],
         precision=16,
-        val_check_interval=100,
+        val_check_interval=10,
         callbacks=[
             progress_bar_callback,
             pl.callbacks.ModelCheckpoint(

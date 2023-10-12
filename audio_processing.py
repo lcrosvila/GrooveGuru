@@ -139,10 +139,10 @@ print('Train size:', len(train_df))
 print('Test size:', len(test_df))
 
 # save train and test spectrograms to txt files
-with open('dataset/train.txt', 'w') as f:
+with open('dataset/dev.txt', 'w') as f:
     for item in train_df.to_list():
         f.write("%s\n" % item)
 
-with open('dataset/dev.txt', 'w') as f:
+with open('dataset/test.txt', 'w') as f:
     for item in test_df.to_list():
         f.write("%s\n" % item)
