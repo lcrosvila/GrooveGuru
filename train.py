@@ -47,6 +47,8 @@ class Model(pl.LightningModule):
             d_model=hidden_size, max_len=max_seq_len
         )
         self.decoder_embedding = nn.Embedding(decoder_vocab_size, hidden_size)
+        # TODO: encoder embedding should be a cnn that takes in the spectrogram
+        # self.encoder_embedding = nn.Conv1d(encoder_ft_size, hidden_size, kernel_size=1)
         self.encoder_embedding = nn.Linear(encoder_ft_size, hidden_size)
         self.transformer = Transformer(
             d_model=hidden_size,
@@ -161,7 +163,7 @@ if __name__ == "__main__":
     pl.seed_everything(SEED)
     random.seed(SEED)
 
-    os.environ["WANDB_SILENT"] = "true"
+    # os.environ["WANDB_SILENT"] = "true"
 
     BATCH_SIZE = 32
 
@@ -192,14 +194,22 @@ if __name__ == "__main__":
 
             split_spectrogram_filenames = set(open(split_spectrogram_filenames_txt).read().split("\n"))
             # filter out charts that are not in split_spectrogram_filenames
-            self.df = self.df[self.df["SPECTROGRAM"].isin(split_spectrogram_filenames)]
+            self.df = self.df.filter(self.df['SPECTROGRAM'].is_in(split_spectrogram_filenames))
+            # SANITY CHECK: print the length of the new df that have unique SPECROGRAM filenames
+            # print(len(set(self.df['SPECTROGRAM'])), len(split_spectrogram_filenames) - 1)
 
-            self.df["chart_tokens"] = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iterrows()]
+            chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
+            self.df = self.df.with_columns(polars.Series(name="chart_tokens", values=chart_tokens)) 
             self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
             self.chart_token_idx = [self.tokenizer.transform(chart) for chart in self.df["chart_tokens"].to_list()] 
 
             # TODO: don't store copies of the spectrograms that belong to the same chart
-            self.song_title2audio_ft =  {row["#TITLE"]: np.load(row["SPECTROGRAM"]) for row in self.df.drop_duplicates(subset=["#TITLE"]).iterrows()}
+            self.song_title2audio_ft = {
+                row["#TITLE"]: np.load(row["SPECTROGRAM"])
+                for row in self.df.filter(self.df['#TITLE'].is_duplicated()).iter_rows(named=True)
+            }
+            # SANITY CHECK: print the length of the song_title2audio_ft dict
+            # print(len(self.song_title2audio_ft))
 
             # find longest chart
             max_chart_len = max([len(chart) for chart in self.chart_token_idx])
@@ -207,17 +217,21 @@ if __name__ == "__main__":
             self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_chart_len - len(chart)) for chart in self.chart_token_idx]
 
             # find longest audio ft
-            max_audio_ft_len = max([audio_ft.shape[0] for audio_ft in self.song_title2audio_ft.values()])
-            # audio has shape (audio_seq_len, audio_ft_size)
-            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, max_audio_ft_len - audio_ft.shape[0]), np.zeros(audio_ft.shape[1:])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
+            max_audio_seq_len = max([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
+
+            # audio has shape (audio_ft_size, audio_seq_len), pad to (audio_ft_size, max_audio_seq_len)
+            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, 0), (0, max_audio_seq_len - audio_ft.shape[1])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
+            # SANITY CHECK: print the shape of the first and second audio ft
+            # print(list(self.song_title2audio_ft.values())[0].shape, list(self.song_title2audio_ft.values())[1].shape)
 
         def __len__(self):
             return len(self.df)
 
         def __getitem__(self, idx):
+            title = self.df.row(idx, named=True)["#TITLE"]
             return {
-                "audio_fts": torch.tensor(self.song_title2audio_ft[self.df[idx]["#TITLE"]]),
-                "chart_tokens": torch.tensor(self.df[idx]["chart_token_idxs"]),
+                "audio_fts": torch.tensor(self.song_title2audio_ft[title]),
+                "chart_tokens": torch.tensor(self.chart_token_idx[idx]),
             }
 
     # class MockDataset(torch.utils.data.Dataset):
@@ -237,10 +251,12 @@ if __name__ == "__main__":
     #             "chart_tokens": torch.randint(0, self.n_tokens, (self.seq_len,)),
     #         }
 
-    # trn_ds = MockDataset(n=256 * 100, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
-    # val_ds = MockDataset(n=256, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
+    df_path = "./dataset/DDR_dataset.json"
+    trn_ds = DDRDataset(df_path, "./dataset/train.txt")
+    # TODO: make sure that the padding of val_ds is done according to max_len of trn_ds
+    val_ds = DDRDataset(df_path, "./dataset/dev.txt")
 
-    dev_ds = 
+    # dev_ds = 
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2
@@ -272,7 +288,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[0],
         precision=16,
         val_check_interval=100,
         callbacks=[
