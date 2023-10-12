@@ -240,7 +240,7 @@ if __name__ == "__main__":
     # trn_ds = MockDataset(n=256 * 100, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
     # val_ds = MockDataset(n=256, audio_ft_size=512, n_tokens=100, seq_len=seq_len)
 
-    dev_ds = 
+    dev_ds = DDRDataset("DDR_dataset.json",
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2
