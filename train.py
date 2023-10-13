@@ -56,6 +56,7 @@ class Model(pl.LightningModule):
             num_encoder_layers=n_encoder_layers,
             num_decoder_layers=n_decoder_layers,
             dim_feedforward=feed_forward_size,
+            batch_first=True,
             dropout=0.1,
         )
         self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
@@ -78,12 +79,14 @@ class Model(pl.LightningModule):
         decoder_logits = self.decoder_output_layer(zl)
         return decoder_logits
 
+    @torch.no_grad()
     def generate(
         self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=1000
     ):
         """
         Does not use KV caching so it's slow
         """
+        self.eval()
         while decoder_prompt_tokens.shape[1] < max_len:
             decoder_logits = self(encoder_fts, decoder_prompt_tokens)[:, -1, :]
             decoder_probs = F.softmax(decoder_logits / temperature, dim=-1)
@@ -299,6 +302,7 @@ if __name__ == "__main__":
         devices=[0],
         precision=16,
         val_check_interval=10,
+        # max_epochs=100,
         callbacks=[
             progress_bar_callback,
             pl.callbacks.ModelCheckpoint(
