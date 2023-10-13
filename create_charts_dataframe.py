@@ -121,10 +121,10 @@ def zero_inflate(bar, target=96):
     return bar
 
 def sanitize_bar(bar):
-    for step in bar:
-        step = re.sub('M','0',step) # mines are ignored
-        step = re.sub('4','2',step) # 4 are holds
-    return bar
+    new_bar = '\n'.join(bar)
+    new_bar = new_bar.replace('M','0') # mines are ignored
+    new_bar = new_bar.replace('4','2') # 4 are holds
+    return new_bar.split('\n')
 
 def preprocess_chart(row):
     # print('HELLO',row)
