@@ -37,6 +37,7 @@ class Model(pl.LightningModule):
         decoder_vocab_size,
         max_seq_len,
         learning_rate,
+        PAD_IDX,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -61,6 +62,25 @@ class Model(pl.LightningModule):
         )
         self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
 
+
+    # from pytorch tutorials on translation
+    def generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
+
+    def create_mask(self, src, tgt):
+        src_seq_len = src.shape[0]
+        tgt_seq_len = tgt.shape[0]
+
+        tgt_mask = self.generate_square_subsequent_mask(tgt_seq_len)
+        src_mask = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool)
+
+        src_padding_mask = (src == self.PAD_IDX).transpose(0, 1)
+        tgt_padding_mask = (tgt == self.PAD_IDX).transpose(0, 1)
+        return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
+
     def forward(self, encoder_fts, decoder_tokens):
         """
         encoder_ft: (batch_size, encoder_seq_len, encoder_ft_size)
@@ -74,8 +94,10 @@ class Model(pl.LightningModule):
         zd = self.decoder_embedding(decoder_tokens)
         zd = zd + self.positional_encoding[:, : zd.shape[1], :].to(self.device)
 
+        src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = self.create_mask(encoder_fts, encoder_fts)
+
         # pass through transformer
-        zl = self.transformer(ze, zd)
+        zl = self.transformer(ze, zd, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask)
         decoder_logits = self.decoder_output_layer(zl)
         return decoder_logits
 
@@ -157,6 +179,12 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+    
+    def validation_epoch_end(self, validation_step_outputs):
+        pred = validation_step_outputs[0]
+        
+        
+
 
 
 if __name__ == "__main__":
@@ -288,6 +316,7 @@ if __name__ == "__main__":
         decoder_vocab_size=n_tokens,
         max_seq_len=seq_len,
         learning_rate=1e-3,
+        PAD_IDX=dev_ds.tokenizer.token_to_idx["<pad>"],
     )
 
     wandb_logger = WandbLogger(log_model="all", project="DDR")
@@ -300,6 +329,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=[0],
+        epochs=20,
         precision=16,
         val_check_interval=10,
         # max_epochs=100,
