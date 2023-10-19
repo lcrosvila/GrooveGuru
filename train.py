@@ -120,7 +120,7 @@ class Model(pl.LightningModule):
 
     @torch.no_grad()
     def generate(
-        self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=1000
+        self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=10000
     ):
         """
         Does not use KV caching so it's slow
@@ -228,7 +228,7 @@ if __name__ == "__main__":
             return chart_tokens_idx
     
     class DDRDataset(torch.utils.data.Dataset):
-        def __init__(self, df_path, split_spectrogram_filenames_txt):
+        def __init__(self, df_path, split_spectrogram_filenames_txt, max_len=10_000):
             # read df json with polars
             self.df = polars.read_json(df_path)
 
@@ -259,11 +259,12 @@ if __name__ == "__main__":
             # print(len(self.song_title2audio_ft))
 
             # find longest chart and audio
-            max_chart_len = max([len(chart) for chart in self.chart_token_idx])
-            print('max_chart_len', max_chart_len)
-            max_audio_seq_len = max([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
-            print('max_audio_seq_len', max_audio_seq_len)
-            max_len = max(max_chart_len, max_audio_seq_len)
+            # max_chart_len = max([len(chart) for chart in self.chart_token_idx])
+            # print('max_chart_len', max_chart_len)
+            # max_audio_seq_len = max([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
+            # print('max_audio_seq_len', max_audio_seq_len)
+            # max_len = max(max_chart_len, max_audio_seq_len)
+            self.max_len = max_len
 
             # # avg chart and audio
             # mean_chart_len = np.mean([len(chart) for chart in self.chart_token_idx])
@@ -272,15 +273,17 @@ if __name__ == "__main__":
             # print('mean_audio_seq_len', mean_audio_seq_len)
             
 
-            # pad all charts to the same length
-            self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_len - len(chart)) for chart in self.chart_token_idx]
+            # pad all charts to the same length, crop the ones that are too long
+            self.chart_token_idx = [chart[:self.max_len] for chart in self.chart_token_idx]
+            self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (self.max_len - len(chart)) for chart in self.chart_token_idx]
 
-            # audio has shape (audio_ft_size, audio_seq_len), pad to (audio_ft_size, max_audio_seq_len)
-            self.song_title2audio_ft = {song_title: np.pad(audio_ft, ((0, 0), (0, max_len - audio_ft.shape[1])), mode="constant") for song_title, audio_ft in self.song_title2audio_ft.items()}
+            # audio has shape (audio_ft_size, audio_seq_len), pad to (audio_ft_size, self.max_len) if necessary or crop if too long
+            self.song_title2audio_ft = {title: np.pad(audio_ft, ((0, 0), (0, self.max_len - audio_ft.shape[1])), mode='constant') if audio_ft.shape[1] < self.max_len else audio_ft[:, :self.max_len] for title, audio_ft in self.song_title2audio_ft.items()}
+
             # SANITY CHECK: print the shape of the first and second audio ft
             # print(list(self.song_title2audio_ft.values())[0].shape, list(self.song_title2audio_ft.values())[1].shape)
 
-            self.seq_len = max_len
+            self.seq_len = self.max_len
             print('seq_len', self.seq_len)
             self.audio_ft_size = list(self.song_title2audio_ft.values())[0].shape[0]
             print('audio_ft_size', self.audio_ft_size)
@@ -319,7 +322,7 @@ if __name__ == "__main__":
     df_path = "./dataset/DDR_dataset.json"
     dev_ds = DDRDataset(df_path,"./dataset/dev.txt")
 
-    BATCH_SIZE = 4
+    BATCH_SIZE = 8
 
     seq_len = dev_ds.seq_len
     audio_ft_size = dev_ds.audio_ft_size
@@ -363,8 +366,8 @@ if __name__ == "__main__":
         devices=[0],
         max_epochs=20,
         precision='16-mixed',
-        val_check_interval=10,
-        accumulate_grad_batches=16,
+        # val_check_interval=10,
+        # accumulate_grad_batches=16,
         # max_epochs=100,
         callbacks=[
             progress_bar_callback,
