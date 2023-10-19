@@ -1,3 +1,5 @@
+
+#%% definitions and import
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
@@ -13,6 +15,8 @@ import datetime
 import logging
 import polars
 import numpy as np
+
+torch.set_float32_matmul_precision('medium')
 
 
 # from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
@@ -44,6 +48,9 @@ class Model(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
+
+        self.PAD_IDX = PAD_IDX
+
         self.positional_encoding = get_positional_encoding(
             d_model=hidden_size, max_len=max_seq_len
         )
@@ -67,25 +74,27 @@ class Model(pl.LightningModule):
     def generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1)
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
-        return mask
+        return mask.to(self.device)
 
 
-    def create_mask(self, src, tgt):
-        src_seq_len = src.shape[0]
-        tgt_seq_len = tgt.shape[0]
+    # def create_mask(self, src, tgt):
+    #     src_seq_len = src.shape[0]
+    #     tgt_seq_len = tgt.shape[0]
 
-        tgt_mask = self.generate_square_subsequent_mask(tgt_seq_len)
-        src_mask = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool)
+    #     tgt_mask = self.generate_square_subsequent_mask(tgt_seq_len)
+    #     src_mask = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool)
 
-        src_padding_mask = (src == self.PAD_IDX).transpose(0, 1)
-        tgt_padding_mask = (tgt == self.PAD_IDX).transpose(0, 1)
-        return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
+    #     src_padding_mask = (src == self.PAD_IDX).transpose(0, 1)
+    #     tgt_padding_mask = (tgt == self.PAD_IDX).transpose(0, 1)
+    #     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
     def forward(self, encoder_fts, decoder_tokens):
         """
         encoder_ft: (batch_size, encoder_seq_len, encoder_ft_size)
         decoder_tokens: (batch_size, decoder_seq_len)
         """
+        # print(encoder_fts.shape)
+        # print(decoder_tokens.shape)
         # embed encoder features
         ze = self.encoder_embedding(encoder_fts)
         # add positional encoding
@@ -94,10 +103,18 @@ class Model(pl.LightningModule):
         zd = self.decoder_embedding(decoder_tokens)
         zd = zd + self.positional_encoding[:, : zd.shape[1], :].to(self.device)
 
-        src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = self.create_mask(encoder_fts, encoder_fts)
+        # src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = self.create_mask(ze, zd)
+        tgt_mask = self.generate_square_subsequent_mask(decoder_tokens.shape[1])#.to(self.device)
+        # src_padding_mask = (ze == self.PAD_IDX).transpose(0, 1)
+        tgt_padding_mask = (decoder_tokens == self.PAD_IDX)#.transpose(0, 1)
 
         # pass through transformer
-        zl = self.transformer(ze, zd, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask)
+        zl = self.transformer(ze, zd, 
+                              tgt_mask=Transformer.generate_square_subsequent_mask(decoder_tokens.shape[1], device=self.device), 
+                            #   src_key_padding_mask=src_padding_mask, 
+                              tgt_key_padding_mask=tgt_padding_mask, 
+                              tgt_is_causal=True
+                              )
         decoder_logits = self.decoder_output_layer(zl)
         return decoder_logits
 
@@ -128,7 +145,7 @@ class Model(pl.LightningModule):
 
         ce = F.cross_entropy(
             decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
-            decoder_output_tokens.reshape(-1),
+            decoder_output_tokens.reshape(-1), ignore_index=self.PAD_IDX,
         )
         metrics = {}
         metrics["cross_entropy"] = ce
@@ -180,8 +197,8 @@ class Model(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
     
-    def validation_epoch_end(self, validation_step_outputs):
-        pred = validation_step_outputs[0]
+    # def validation_epoch_end(self, validation_step_outputs):
+    #     pred = validation_step_outputs[0]
         
         
 
@@ -224,6 +241,7 @@ if __name__ == "__main__":
             # print(set(self.df['SPECTROGRAM']) == split_spectrogram_filenames)
 
             chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
+
             self.df = self.df.with_columns(polars.Series(name="chart_tokens", values=chart_tokens)) 
             self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
             self.chart_token_idx = [self.tokenizer.transform(chart) for chart in self.df["chart_tokens"].to_list()] 
@@ -242,9 +260,17 @@ if __name__ == "__main__":
 
             # find longest chart and audio
             max_chart_len = max([len(chart) for chart in self.chart_token_idx])
+            print('max_chart_len', max_chart_len)
             max_audio_seq_len = max([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
-
+            print('max_audio_seq_len', max_audio_seq_len)
             max_len = max(max_chart_len, max_audio_seq_len)
+
+            # # avg chart and audio
+            # mean_chart_len = np.mean([len(chart) for chart in self.chart_token_idx])
+            # print('mean_chart_len', mean_chart_len)
+            # mean_audio_seq_len = np.mean([audio_ft.shape[1] for audio_ft in self.song_title2audio_ft.values()])
+            # print('mean_audio_seq_len', mean_audio_seq_len)
+            
 
             # pad all charts to the same length
             self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (max_len - len(chart)) for chart in self.chart_token_idx]
@@ -255,8 +281,11 @@ if __name__ == "__main__":
             # print(list(self.song_title2audio_ft.values())[0].shape, list(self.song_title2audio_ft.values())[1].shape)
 
             self.seq_len = max_len
+            print('seq_len', self.seq_len)
             self.audio_ft_size = list(self.song_title2audio_ft.values())[0].shape[0]
+            print('audio_ft_size', self.audio_ft_size)
             self.n_tokens = len(self.tokenizer.token_to_idx)
+            print('n_tokens', self.n_tokens)
 
         def __len__(self):
             return len(self.df)
@@ -286,10 +315,11 @@ if __name__ == "__main__":
     #             "chart_tokens": torch.randint(0, self.n_tokens, (self.seq_len,)),
     #         }
 
+    #%%
     df_path = "./dataset/DDR_dataset.json"
     dev_ds = DDRDataset(df_path,"./dataset/dev.txt")
 
-    BATCH_SIZE = 32
+    BATCH_SIZE = 4
 
     seq_len = dev_ds.seq_len
     audio_ft_size = dev_ds.audio_ft_size
@@ -306,10 +336,12 @@ if __name__ == "__main__":
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
+
+    #%%
     model = Model(
         hidden_size=32,
         n_heads=2,
-        feed_forward_size=128,
+        feed_forward_size=64,
         n_encoder_layers=2,
         encoder_ft_size=audio_ft_size,
         n_decoder_layers=2,
@@ -329,9 +361,10 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=[0],
-        epochs=20,
-        precision=16,
+        max_epochs=20,
+        precision='16-mixed',
         val_check_interval=10,
+        accumulate_grad_batches=16,
         # max_epochs=100,
         callbacks=[
             progress_bar_callback,

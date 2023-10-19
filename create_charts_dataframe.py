@@ -158,5 +158,11 @@ for i in tqdm(range(len(df))):
 df = df.with_columns(pl.Series(name="NOTES_preproc", values=preprocessed_charts)) 
 # print(df.head(5))
 
+df = df.with_columns(pl.Series(name="chart_length", values=df['NOTES_preproc'].map_elements(lambda x: len(x.split('\n')))))            
+#filter df to only include rows with chart_lenght less than 10000
+print('filtering charts larger than 10000')
+df = df.filter(df['chart_length'] < 10000)
+
+
 print('Saving JSON file')
 df.write_json('./dataset/DDR_dataset.json')
