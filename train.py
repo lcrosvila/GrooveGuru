@@ -204,8 +204,10 @@ class Model(pl.LightningModule):
         # turn into string
         generated = [self.idx_to_token[idx] for idx in generated[0].tolist()]
         generated = "\n".join(generated)
-        # log
-        self.log("val/generated", generated, prog_bar=True)
+        # log for pytorch lightning
+        columns = ["chart"]
+        data = [[generated]]
+        self.logger.log_table(key="generated", columns=columns, data=data, step=self.global_step)
 
         return loss
 
