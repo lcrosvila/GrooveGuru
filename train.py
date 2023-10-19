@@ -204,9 +204,11 @@ class Model(pl.LightningModule):
         # turn into string
         generated = [self.idx_to_token[idx] for idx in generated[0].tolist()]
         generated = "\n".join(generated)
+        true = [self.idx_to_token[idx] for idx in batch["chart_tokens"][0].tolist()]
+        true = "\n".join(true)
         # log for pytorch lightning
-        columns = ["chart"]
-        data = [[generated]]
+        columns = ["generated", "true"]
+        data = [[generated, true]]
         self.logger.log_table(key="generated", columns=columns, data=data, step=self.global_step)
 
         return loss
@@ -348,10 +350,10 @@ if __name__ == "__main__":
     trn_ds, val_ds = torch.utils.data.random_split(dev_ds, [len(dev_ds) - 100, 100])
 
     trn_dl = torch.utils.data.DataLoader(
-        trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=2
+        trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=40
     )
     val_dl = torch.utils.data.DataLoader(
-        val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=2
+        val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=40
     )
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
