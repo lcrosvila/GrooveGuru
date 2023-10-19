@@ -1,19 +1,5 @@
-class MockDataset(torch.utils.data.Dataset):
-    def __init__(self, n, audio_ft_size, n_tokens, seq_len):
-        self.audio_ft_size = audio_ft_size
-        self.n_tokens = n_tokens
-        self.seq_len = seq_len
-        self.n = n
-        pass
-
-    def __len__(self):
-        return self.n
-
-    def __getitem__(self, idx):
-        return {
-            "audio_fts": torch.randn(self.seq_len, self.audio_ft_size),
-            "chart_tokens": torch.randint(0, self.n_tokens, (self.seq_len,)),
-        }
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def print_score(notes, text=True, plot=False, resolution=8):
 
@@ -23,8 +9,6 @@ def print_score(notes, text=True, plot=False, resolution=8):
     #['⏬','⏪', '⏩', '⏫', ]
     holdon = ['▽','◁','▷','△'] 
     holdoff = ['▽','◁','▷','△'] 
-
-    print(notes.shape)
 
     # select every other values of the notes array on the second axis
     downsample = 96//resolution
@@ -67,9 +51,12 @@ def print_score(notes, text=True, plot=False, resolution=8):
 
         return string
     if text:
+        str_out = ''
         for idx, line in enumerate(notes):
             # insert a | every n characters
             string = numbers2arrows(''.join([str(n) for n in notes[3-idx]]), arrows[3-idx], holdon[3-idx], holdoff[3-idx], fill_holds=True)
-            n = D
+            n = resolution
             string = '|'.join([string[i:i+n] for i in range(0, len(string), n)])
-            print(white_arrows[3-idx]+'|'+string)
+            str_out += white_arrows[3-idx]+'|'+string+'\n'
+        
+        return str_out

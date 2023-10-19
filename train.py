@@ -15,6 +15,7 @@ import datetime
 import logging
 import polars
 import numpy as np
+from data import print_score
 
 torch.set_float32_matmul_precision('medium')
 
@@ -209,7 +210,32 @@ class Model(pl.LightningModule):
         # log for pytorch lightning
         columns = ["generated", "true"]
         data = [[generated, true]]
-        self.logger.log_table(key="generated", columns=columns, data=data, step=self.global_step)
+        self.logger.log_table(key="generated_string", columns=columns, data=data, step=self.global_step)
+
+        #TO DO: very ugly way to remove <sos>, <eos>, <pad> tokens and difficulty from the chart, need to change it
+        notes_generated = []
+        for line in generated.split("\n"):
+            if line in ['<sos>', '<eos>', '<pad>']:
+                continue
+            if len(line) == 0 or len(line) < 4:
+                continue
+            notes_generated.append([int(n) for n in line])
+        
+        notes_true = []
+        for line in true.split("\n"):
+            if line in ['<sos>', '<eos>', '<pad>', ' ']:
+                continue
+            if len(line) == 0 or len(line) < 4:
+                continue
+            notes_true.append([int(n) for n in line])
+
+        arrows_generated = print_score(np.array(notes_generated).T)
+        arrows_true = print_score(np.array(notes_true).T)
+
+        # log for pytorch lightning
+        columns = ["generated", "true"]
+        data = [[arrows_generated, arrows_true]]
+        self.logger.log_table(key="generated_arrows", columns=columns, data=data, step=self.global_step)
 
         return loss
 
