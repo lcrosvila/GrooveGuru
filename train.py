@@ -16,6 +16,7 @@ import logging
 import polars
 import numpy as np
 from data import print_score
+import re
 
 torch.set_float32_matmul_precision('medium')
 
@@ -217,15 +218,17 @@ class Model(pl.LightningModule):
         for line in generated.split("\n"):
             if line in ['<sos>', '<eos>', '<pad>']:
                 continue
-            if len(line) == 0 or len(line) < 4:
+            # if the line is not four integers, continue
+            if not bool(re.match(r'^\d{4}$', line)):
                 continue
             notes_generated.append([int(n) for n in line])
         
         notes_true = []
         for line in true.split("\n"):
-            if line in ['<sos>', '<eos>', '<pad>', ' ']:
+            if line in ['<sos>', '<eos>', '<pad>']:
                 continue
-            if len(line) == 0 or len(line) < 4:
+            # if the line is not four integers, continue
+            if not bool(re.match(r'^\d{4}$', line)):
                 continue
             notes_true.append([int(n) for n in line])
 
