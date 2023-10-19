@@ -107,6 +107,8 @@ class Model(pl.LightningModule):
         tgt_mask = self.generate_square_subsequent_mask(decoder_tokens.shape[1])#.to(self.device)
         # src_padding_mask = (ze == self.PAD_IDX).transpose(0, 1)
         tgt_padding_mask = (decoder_tokens == self.PAD_IDX)#.transpose(0, 1)
+        # make tgt_padding_mask be of zeroes and -inf
+        tgt_padding_mask = tgt_padding_mask.float().masked_fill(tgt_padding_mask == 1, float('-inf')).masked_fill(tgt_padding_mask == 0, float(0.0))
 
         # pass through transformer
         zl = self.transformer(ze, zd, 
