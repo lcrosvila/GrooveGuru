@@ -42,6 +42,7 @@ class Model(pl.LightningModule):
         max_seq_len,
         learning_rate,
         PAD_IDX,
+        idx_to_token,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -68,6 +69,7 @@ class Model(pl.LightningModule):
             dropout=0.1,
         )
         self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
+        self.idx_to_token = idx_to_token
 
 
     # from pytorch tutorials on translation
@@ -108,7 +110,7 @@ class Model(pl.LightningModule):
         # src_padding_mask = (ze == self.PAD_IDX).transpose(0, 1)
         tgt_padding_mask = (decoder_tokens == self.PAD_IDX)#.transpose(0, 1)
         # make tgt_padding_mask be of zeroes and -inf
-        tgt_padding_mask = tgt_padding_mask.float().masked_fill(tgt_padding_mask == 1, float('-inf')).masked_fill(tgt_padding_mask == 0, float(0.0))
+        # tgt_padding_mask = tgt_padding_mask.float().masked_fill(tgt_padding_mask == 1, float('-inf')).masked_fill(tgt_padding_mask == 0, float(0.0))
 
         # pass through transformer
         zl = self.transformer(ze, zd, 
@@ -194,6 +196,17 @@ class Model(pl.LightningModule):
             self.log(f"val/{metric}", metrics[metric], prog_bar=True)
         loss = metrics["cross_entropy"]
         self.log("val/loss", loss, prog_bar=True)
+
+        # generate the first chart in the batch
+        generated = self.generate(
+            batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=10_000
+        )
+        # turn into string
+        generated = [self.idx_to_token[idx] for idx in generated[0].tolist()]
+        generated = "\n".join(generated)
+        # log
+        self.log("val/generated", generated, prog_bar=True)
+
         return loss
 
     def configure_optimizers(self):
@@ -352,8 +365,9 @@ if __name__ == "__main__":
         n_decoder_layers=2,
         decoder_vocab_size=n_tokens,
         max_seq_len=seq_len,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         PAD_IDX=dev_ds.tokenizer.token_to_idx["<pad>"],
+        idx_to_token=dev_ds.tokenizer.idx_to_token,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="DDR")
