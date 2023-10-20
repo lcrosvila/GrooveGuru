@@ -1,5 +1,6 @@
 # custom
 dataset/*
+outside_dataset/*
 *.zip
 __pycache__/
 *.md

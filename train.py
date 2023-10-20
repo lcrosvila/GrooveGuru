@@ -370,6 +370,13 @@ if __name__ == "__main__":
     df_path = "./dataset/DDR_dataset.json"
     dev_ds = DDRDataset(df_path,"./dataset/dev.txt")
 
+    # save dev_ds.tokenizer.token_to_idx, dev_ds.tokenizer.idx_to_token, dev_ds.seq_len, dev_ds.audio_ft_size, dev_ds.n_tokens
+    torch.save(dev_ds.tokenizer.token_to_idx, './dataset/token_to_idx.pt')
+    torch.save(dev_ds.tokenizer.idx_to_token, './dataset/idx_to_token.pt')
+    torch.save(dev_ds.seq_len, './dataset/seq_len.pt')
+    torch.save(dev_ds.audio_ft_size, './dataset/audio_ft_size.pt')
+    torch.save(dev_ds.n_tokens, './dataset/n_tokens.pt')
+
     BATCH_SIZE = 8
 
     seq_len = dev_ds.seq_len

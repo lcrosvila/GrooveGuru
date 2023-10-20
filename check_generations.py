@@ -57,6 +57,7 @@ class Model(pl.LightningModule):
             num_decoder_layers=n_decoder_layers,
             dim_feedforward=feed_forward_size,
             dropout=0.1,
+            batch_first=True,
         )
         self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
 
