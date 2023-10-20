@@ -398,7 +398,7 @@ if __name__ == "__main__":
         n_decoder_layers=2,
         decoder_vocab_size=n_tokens,
         max_seq_len=seq_len,
-        learning_rate=1e-4,
+        learning_rate=1e-2,
         PAD_IDX=dev_ds.tokenizer.token_to_idx["<pad>"],
         idx_to_token=dev_ds.tokenizer.idx_to_token,
     )
@@ -413,7 +413,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator="gpu",
         devices=[0],
-        max_epochs=20,
+        max_epochs=40,
         precision='16-mixed',
         # val_check_interval=10,
         # accumulate_grad_batches=16,
