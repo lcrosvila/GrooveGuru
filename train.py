@@ -216,7 +216,7 @@ class Model(pl.LightningModule):
         data = [[generated, true]]
         self.logger.log_table(key="generated_string", columns=columns, data=data, step=self.global_step)
 
-        #TO DO: very ugly way to remove <sos>, <eos>, <pad> tokens and difficulty from the chart, need to change it
+        #TODO: very ugly way to remove <sos>, <eos>, <pad> tokens and difficulty from the chart, need to change it
         notes_generated = []
         for line in generated.split("\n"):
             if line in ['<sos>', '<eos>', '<pad>']:
@@ -387,8 +387,18 @@ if __name__ == "__main__":
         with open("./dataset/val.txt", "w") as f:
             f.write("\n".join(val_song_titles))
 
-    trn_ds = DDRDataset(df_path, "./dataset/train.txt", max_len=5_000)
-    val_ds = DDRDataset(df_path, "./dataset/val.txt", max_len=5_000, tokenizer=trn_ds.tokenizer)
+    #TODO: make tokenizer generation better
+    df = polars.read_json(df_path)
+    split_spectrogram_filenames = set(open("./dataset/dev.txt").read().split("\n"))
+    # remove empty string
+    split_spectrogram_filenames = split_spectrogram_filenames - {''}
+    # filter out charts that are not in split_spectrogram_filenames
+    df = df.filter(df['SPECTROGRAM'].is_in(split_spectrogram_filenames))
+    chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_coarse"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in df.iter_rows(named=True)]
+    tokenizer = ChartTokenizer(chart_tokens)
+
+    trn_ds = DDRDataset(df_path, "./dataset/train.txt", max_len=5_000, tokenizer=tokenizer)
+    val_ds = DDRDataset(df_path, "./dataset/val.txt", max_len=5_000, tokenizer=tokenizer)
     # save trn_ds.tokenizer.token_to_idx, trn_ds.tokenizer.idx_to_token, trn_ds.seq_len, trn_ds.audio_ft_size, trn_ds.n_tokens
     torch.save(trn_ds.tokenizer.token_to_idx, './dataset/token_to_idx.pt')
     torch.save(trn_ds.tokenizer.idx_to_token, './dataset/idx_to_token.pt')
