@@ -288,7 +288,7 @@ if __name__ == "__main__":
             # SANITY CHECK: check if the resulting set(self.df['SPECTROGRAM']) is the same as split_spectrogram_filenames
             # print(set(self.df['SPECTROGRAM']) == split_spectrogram_filenames)
 
-            chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_fine"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
+            chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_coarse"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
 
             self.df = self.df.with_columns(polars.Series(name="chart_tokens", values=chart_tokens)) 
             self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
@@ -368,15 +368,34 @@ if __name__ == "__main__":
 
     #%%
     df_path = "./dataset/DDR_dataset.json"
-    dev_ds = DDRDataset(df_path,"./dataset/dev.txt")
+
+    # load song titles from "./dataset/dev.txt" and do the random split, save train and val as txt files
+    with open("./dataset/dev.txt") as f:
+        song_titles = f.read().split("\n")
+        song_titles = [title for title in song_titles if title != '']
+        random.shuffle(song_titles)
+        train_song_titles = song_titles[:int(len(song_titles)*0.8)]
+        val_song_titles = song_titles[int(len(song_titles)*0.8):]
+        with open("./dataset/train.txt", "w") as f:
+            f.write("\n".join(train_song_titles))
+        with open("./dataset/val.txt", "w") as f:
+            f.write("\n".join(val_song_titles))
+
+    trn_ds = DDRDataset(df_path, "./dataset/train.txt")
+    val_ds = DDRDataset(df_path, "./dataset/val.txt")
+    # save trn_ds.tokenizer.token_to_idx, trn_ds.tokenizer.idx_to_token, trn_ds.seq_len, trn_ds.audio_ft_size, trn_ds.n_tokens
+    torch.save(trn_ds.tokenizer.token_to_idx, './dataset/token_to_idx.pt')
+    torch.save(trn_ds.tokenizer.idx_to_token, './dataset/idx_to_token.pt')
+    torch.save(trn_ds.seq_len, './dataset/seq_len.pt')
+    torch.save(trn_ds.audio_ft_size, './dataset/audio_ft_size.pt')
+    torch.save(trn_ds.n_tokens, './dataset/n_tokens.pt')
+
 
     BATCH_SIZE = 8
 
-    seq_len = dev_ds.seq_len
-    audio_ft_size = dev_ds.audio_ft_size
-    n_tokens = dev_ds.n_tokens
-
-    trn_ds, val_ds = torch.utils.data.random_split(dev_ds, [len(dev_ds) - 100, 100])
+    seq_len = trn_ds.seq_len
+    audio_ft_size = trn_ds.audio_ft_size
+    n_tokens = trn_ds.n_tokens
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=40
@@ -398,9 +417,9 @@ if __name__ == "__main__":
         n_decoder_layers=2,
         decoder_vocab_size=n_tokens,
         max_seq_len=seq_len,
-        learning_rate=1e-4,
-        PAD_IDX=dev_ds.tokenizer.token_to_idx["<pad>"],
-        idx_to_token=dev_ds.tokenizer.idx_to_token,
+        learning_rate=1e-2,
+        PAD_IDX=trn_ds.tokenizer.token_to_idx["<pad>"],
+        idx_to_token=trn_ds.tokenizer.idx_to_token,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="DDR")
@@ -409,6 +428,9 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
+
+    # add difficulty coarse into logger
+    wandb_logger.log_hyperparams({"difficulty_type": "coarse"})
 
     trainer = pl.Trainer(
         accelerator="gpu",
