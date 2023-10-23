@@ -2,6 +2,7 @@
 dataset/*
 outside_dataset/*
 generated_charts/*
+generated_charts/**/*
 *.zip
 __pycache__/
 *.md
