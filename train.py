@@ -30,7 +30,6 @@ def get_positional_encoding(d_model: int, max_len: int = 5000):
     pe[:, 0, 1::2] = torch.cos(position * div_term)
     return pe.reshape(1, max_len, d_model)
 
-
 class Model(pl.LightningModule):
     def __init__(
         self,
@@ -57,10 +56,13 @@ class Model(pl.LightningModule):
         self.positional_encoding = get_positional_encoding(
             d_model=hidden_size, max_len=max_seq_len
         )
+        # self.decoder_embedding = nn.Linear(decoder_vocab_size, hidden_size)
         self.decoder_embedding = nn.Embedding(decoder_vocab_size, hidden_size)
         # TODO: encoder embedding should be a cnn that takes in the spectrogram
         # self.encoder_embedding = nn.Conv1d(encoder_ft_size, hidden_size, kernel_size=1)
+
         self.encoder_embedding = nn.Linear(encoder_ft_size, hidden_size)
+        # self.encoder_embedding = nn.Embedding(encoder_ft_size, hidden_size)
         self.transformer = Transformer(
             d_model=hidden_size,
             nhead=n_heads,
@@ -96,19 +98,20 @@ class Model(pl.LightningModule):
         """
         encoder_ft: (batch_size, encoder_seq_len, encoder_ft_size)
         decoder_tokens: (batch_size, decoder_seq_len)
-        """
+        """            
         # print(encoder_fts.shape)
         # print(decoder_tokens.shape)
         # embed encoder features
         ze = self.encoder_embedding(encoder_fts)
         # add positional encoding
         ze = ze + self.positional_encoding[:, : ze.shape[1], :].to(self.device)
+
         # embed decoder tokens
         zd = self.decoder_embedding(decoder_tokens)
         zd = zd + self.positional_encoding[:, : zd.shape[1], :].to(self.device)
 
         # src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = self.create_mask(ze, zd)
-        tgt_mask = self.generate_square_subsequent_mask(decoder_tokens.shape[1])#.to(self.device)
+        # tgt_mask = self.generate_square_subsequent_mask(decoder_tokens.shape[1]).to(self.device)
         # src_padding_mask = (ze == self.PAD_IDX).transpose(0, 1)
         tgt_padding_mask = (decoder_tokens == self.PAD_IDX)#.transpose(0, 1)
         # make tgt_padding_mask be of zeroes and -inf
@@ -126,7 +129,7 @@ class Model(pl.LightningModule):
 
     @torch.no_grad()
     def generate(
-        self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=10000
+        self, encoder_fts, decoder_prompt_tokens, temperature=1.0, max_len=5_000
     ):
         """
         Does not use KV caching so it's slow
@@ -188,10 +191,10 @@ class Model(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            generated = self.generate(
-                batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50
-            )
+        # if batch_idx == 0:
+        #     generated = self.generate(
+        #         batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=100
+        #     )
         with torch.no_grad():
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
@@ -201,7 +204,7 @@ class Model(pl.LightningModule):
 
         # generate the first chart in the batch
         generated = self.generate(
-            batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=10_000
+            batch["audio_fts"], batch["chart_tokens"][:, :2], temperature=1.0, max_len=5_000
         )
         # turn into string
         generated = [self.idx_to_token[idx] for idx in generated[0].tolist()]
@@ -268,7 +271,7 @@ if __name__ == "__main__":
             # sort 
             all_tokens = sorted(all_tokens)
             self.token_to_idx = {token: idx for idx, token in enumerate(all_tokens)}
-            self.idx_to_token = all_tokens
+            self.idx_to_token = {idx: token for idx, token in enumerate(all_tokens)}
 
         def transform(self, chart):
             chart_tokens = chart.split("\n")
@@ -276,7 +279,7 @@ if __name__ == "__main__":
             return chart_tokens_idx
     
     class DDRDataset(torch.utils.data.Dataset):
-        def __init__(self, df_path, split_spectrogram_filenames_txt, max_len=10_000):
+        def __init__(self, df_path, split_spectrogram_filenames_txt, max_len=10_000, tokenizer=None):
             # read df json with polars
             self.df = polars.read_json(df_path)
 
@@ -291,7 +294,10 @@ if __name__ == "__main__":
             chart_tokens = [ f'<sos>\n {row["NOTES_difficulty_coarse"]}\n{row["NOTES_preproc"]}\n<eos>\n<pad>' for row in self.df.iter_rows(named=True)]
 
             self.df = self.df.with_columns(polars.Series(name="chart_tokens", values=chart_tokens)) 
-            self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
+            if tokenizer is None:
+                self.tokenizer = ChartTokenizer(self.df["chart_tokens"].to_list()) 
+            else:
+                self.tokenizer = tokenizer
             self.chart_token_idx = [self.tokenizer.transform(chart) for chart in self.df["chart_tokens"].to_list()] 
 
             # TODO: don't store copies of the spectrograms that belong to the same chart
@@ -322,8 +328,8 @@ if __name__ == "__main__":
             
 
             # pad all charts to the same length, crop the ones that are too long
-            self.chart_token_idx = [chart[:self.max_len] for chart in self.chart_token_idx]
             self.chart_token_idx = [chart + [self.tokenizer.token_to_idx["<pad>"]] * (self.max_len - len(chart)) for chart in self.chart_token_idx]
+            self.chart_token_idx = [chart[:self.max_len] for chart in self.chart_token_idx]
 
             # audio has shape (audio_ft_size, audio_seq_len), pad to (audio_ft_size, self.max_len) if necessary or crop if too long
             self.song_title2audio_ft = {title: np.pad(audio_ft, ((0, 0), (0, self.max_len - audio_ft.shape[1])), mode='constant') if audio_ft.shape[1] < self.max_len else audio_ft[:, :self.max_len] for title, audio_ft in self.song_title2audio_ft.items()}
@@ -381,8 +387,8 @@ if __name__ == "__main__":
         with open("./dataset/val.txt", "w") as f:
             f.write("\n".join(val_song_titles))
 
-    trn_ds = DDRDataset(df_path, "./dataset/train.txt")
-    val_ds = DDRDataset(df_path, "./dataset/val.txt")
+    trn_ds = DDRDataset(df_path, "./dataset/train.txt", max_len=5_000)
+    val_ds = DDRDataset(df_path, "./dataset/val.txt", max_len=5_000, tokenizer=trn_ds.tokenizer)
     # save trn_ds.tokenizer.token_to_idx, trn_ds.tokenizer.idx_to_token, trn_ds.seq_len, trn_ds.audio_ft_size, trn_ds.n_tokens
     torch.save(trn_ds.tokenizer.token_to_idx, './dataset/token_to_idx.pt')
     torch.save(trn_ds.tokenizer.idx_to_token, './dataset/idx_to_token.pt')
@@ -440,6 +446,7 @@ if __name__ == "__main__":
         # val_check_interval=10,
         # accumulate_grad_batches=16,
         # max_epochs=100,
+        log_every_n_steps=1,
         callbacks=[
             progress_bar_callback,
             pl.callbacks.ModelCheckpoint(

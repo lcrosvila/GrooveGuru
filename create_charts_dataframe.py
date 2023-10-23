@@ -83,7 +83,7 @@ for chart in tqdm(charts):
         # print('index of notes:', idx)
         item['NOTES_type'].append(elements[idx+1].strip())
         item['NOTES_author'].append(elements[idx+2].strip())
-        item['NOTES_difficulty_coarse'].append(elements[idx+3].strip())
+        item['NOTES_difficulty_coarse'].append(elements[idx+3].strip().lower())
         item['NOTES_difficulty_fine'].append(elements[idx+4].strip())
         item['NOTES_radar'].append(elements[idx+5].strip())
         item['NOTES'].append(elements[idx+6:])
