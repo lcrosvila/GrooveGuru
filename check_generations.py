@@ -57,6 +57,7 @@ class Model(pl.LightningModule):
             num_decoder_layers=n_decoder_layers,
             dim_feedforward=feed_forward_size,
             dropout=0.1,
+            batch_first=True,
         )
         self.decoder_output_layer = nn.Linear(hidden_size, decoder_vocab_size)
 
@@ -288,7 +289,9 @@ if __name__ == "__main__":
 
     
     # load latest checkpoint
-    model = Model.load_from_checkpoint("./checkpoints/treasured-vortex-59/last.ckpt")
+    # run = 'treasured-vortex-59' # best prior to causal masking
+    run = 'atomic-leaf-126' # best after causal masking
+    model = Model.load_from_checkpoint("./checkpoints/"+run+"/last.ckpt")
     model.eval()
     model.freeze()
     model.cuda()
@@ -301,12 +304,25 @@ if __name__ == "__main__":
     generated = model.generate(
         batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50
     )
-
-    # print the generated charts and the ground truth charts using dev_ds.tokenizer.idx_to_token
-
-    for i in range(5):
-        print("Generated chart:")
-        print("\n".join([dev_ds.tokenizer.idx_to_token[idx] for idx in generated[i]][40:60]))
-        print("Ground truth chart:")
-        print("\n".join([dev_ds.tokenizer.idx_to_token[idx] for idx in batch["chart_tokens"][i]][40:60]))
-        print("\n\n\n")
+    
+    resolution = 32
+    # save generated charts together with their spectrogram names in a txt file
+    for i in range(20):
+        # if folder 'generated_charts'/run does not exist, create it
+        if not os.path.exists("generated_charts/"+run):
+            os.makedirs("generated_charts/"+run)
+        
+        filename = f"generated_charts/{run}/{dev_ds.df['SPECTROGRAM'][i].split('/')[-1][:-4]}_{dev_ds.df['NOTES_difficulty_coarse'][i]}_{dev_ds.df['NOTES_difficulty_fine'][i]}.txt"
+        
+        with open(filename, "w") as f:
+            for ii in range(len(generated)):
+                tokens = [dev_ds.tokenizer.idx_to_token[idx] for idx in generated[ii]]
+                tokens = [t for t in tokens if t not in ["<sos>", "<eos>", "<pad>"]]
+                tokens = tokens[1:]
+                downsample = 96//resolution
+                tokens = tokens[::downsample]
+                
+                # write the chart to the txt file, with '\n,\n' every 96 tokens
+                for jj in range(0, len(tokens), resolution):
+                    f.write("\n".join(tokens[jj:jj+resolution]))
+                    f.write("\n,\n")
