@@ -2,7 +2,8 @@
 import torch
 import numpy as np
 from audio_processing import process_audio
-from train import Model
+# from train import Model
+from check_generations import Model
 
 # %%
 sm_file = '/root/GrooveGuru/outside_dataset/Video Game Step Pack /Death By Glamour/Death By Glamour.sm'
@@ -34,15 +35,15 @@ model = Model(
     decoder_vocab_size=n_tokens,
     max_seq_len=seq_len,
     learning_rate=1e-3,
-    PAD_IDX=token_to_idx["<pad>"],
-    idx_to_token=idx_to_token,
+    # PAD_IDX=token_to_idx["<pad>"],
+    # idx_to_token=idx_to_token,
 )
 
 # load latest checkpoint
-# run = 'treasured-vortex-59' # best prior to causal masking
-run = 'atomic-leaf-126' # best after causal masking
+run = 'treasured-vortex-59' # best prior to causal masking
+# run = 'atomic-leaf-126' # best after causal masking
 print(torch.device)
-model = Model.load_from_checkpoint("./checkpoints/"+run+"/last.ckpt", map_location=torch.device('cpu'))
+model = Model.load_from_checkpoint("./checkpoints/"+run+"/last.ckpt")
 model.eval()
 model.freeze()
 try:
@@ -54,17 +55,33 @@ device = model.device
 print(device)
 
 # %%
-difficulty_fine = ' 5:'
-chart_tokens = f'<sos>\n{difficulty_fine}'
+# difficulty_fine = ' 5:'
+# chart_tokens = f'<sos>\n{difficulty_fine}'
+difficulty_coarse = 'Difficult:'
+chart_tokens = f'<sos>\n{difficulty_coarse}'
 chart_tokens = [token_to_idx[t] for t in chart_tokens.split('\n')]
 chart_tokens = torch.tensor(chart_tokens).unsqueeze(0).to(device)
 spec = torch.tensor(S.T, dtype=torch.float32).unsqueeze(0).to(device)
 # %%
 generated = model.generate(spec, chart_tokens, max_len=10000)
 
+# %%
 # save generated chart
-generated = [idx_to_token[i] for i in generated]
-with open('./generated_charts/'+run+'.txt', 'w') as f:
-    f.write('\n'.join(generated))
-for g in generated:
-    print(token_to_idx[g])
+
+resolution = 32
+filename = "./generated_charts/"+run+"_"+str(sm_file.split('/')[-1])+".txt"
+with open(filename, "w") as f:
+    for ii in range(len(generated)):
+        tokens = [idx_to_token[idx] for idx in generated[ii]]
+        tokens = [t for t in tokens if t not in ["<sos>", "<eos>", "<pad>"]]
+        tokens = tokens[1:]
+        downsample = 96//resolution
+        tokens = tokens[::downsample]
+        
+        # write the chart to the txt file, with '\n,\n' every 96 tokens
+        for jj in range(0, len(tokens), resolution):
+            f.write("\n".join(tokens[jj:jj+resolution]))
+            f.write("\n,\n")
+
+for t in tokens:
+    print(t)

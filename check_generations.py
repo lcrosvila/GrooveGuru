@@ -305,7 +305,7 @@ if __name__ == "__main__":
         batch["audio_fts"], batch["chart_tokens"], temperature=1.0, max_len=50
     )
     
-    resolution = 8
+    resolution = 32
     # save generated charts together with their spectrogram names in a txt file
     for i in range(20):
         # if folder 'generated_charts'/run does not exist, create it
