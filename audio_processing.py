@@ -42,7 +42,7 @@ def process_audio(audio_path, bpm, offset, calculate_beat=False):
     # compute stft
     n_fft = 64
 
-    hop_length = int(np.ceil((60 / bpm) * (4 / 96) * sr))
+    hop_length = int(np.ceil((60 / bpm) * (4 / 1) * sr))
     # print('hop length:', hop_length)
 
     S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))
@@ -50,7 +50,9 @@ def process_audio(audio_path, bpm, offset, calculate_beat=False):
 
 # %%
 import polars as pl
-df = pl.read_json('dataset/DDR_dataset.json')
+df_path = './dataset/DDR_dataset_2k.json'
+print('importing dataframe...', df_path)
+df = pl.read_json(df_path)
 
 # %%
 # for all tunes, get the bpm, offset and audio path and process the audio
@@ -61,9 +63,9 @@ df = df.with_columns(pl.Series(name="SPECTROGRAM", values=['']*len(df)))
 df = df.with_columns(pl.Series(name="bpm_counts", values=df['#BPMS'].map_elements(lambda x: len(x.split(','))))) 
 df.filter(pl.col('bpm_counts') == 1)
 
-# create a npy_files folder
-if not os.path.exists('dataset/npy_files'):
-    os.mkdir('dataset/npy_files')
+# create a npy_files_short folder
+if not os.path.exists('dataset/npy_files_short'):
+    os.mkdir('dataset/npy_files_short')
 
 # %%
 count = 0
@@ -105,32 +107,33 @@ for row in tqdm(df.iter_rows(named=True)):
         continue
 
     # check if npy file already exists
-    if os.path.isfile('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'):
+    if os.path.isfile('./dataset/npy_files_short/'+audio_path.split('/')[-1][:-3] + 'npy'):
         # row['SPECTROGRAM'] = './dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'
-        specs.append('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy')
+        specs.append('./dataset/npy_files_short/'+audio_path.split('/')[-1][:-3] + 'npy')
         continue
 
     S = process_audio(audio_path, bpm, offset, calculate_beat=False)
     # np.save(audio_path[:-3] + 'npy', S)
-    np.save('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy', S)
+    np.save('./dataset/npy_files_short/'+audio_path.split('/')[-1][:-3] + 'npy', S)
 
-    specs.append('./dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy')
-    # row['SPECTROGRAM'] = './dataset/npy_files/'+audio_path.split('/')[-1][:-3] + 'npy'
+    specs.append('./dataset/npy_files_short/'+audio_path.split('/')[-1][:-3] + 'npy')
+    # row['SPECTROGRAM'] = './dataset/npy_files_short/'+audio_path.split('/')[-1][:-3] + 'npy'
 
 df = df.with_columns(pl.Series(name="SPECTROGRAM", values=specs)) 
-df.write_json('dataset/DDR_dataset.json')
+print('saving dataframe...', df_path)
+df.write_json(df_path)
 
 # %%
 from sklearn.model_selection import train_test_split
 
-# remove './dataset/npy_files/V.npy' from df in SPECTROGRAM column
-df = df.filter(pl.col('SPECTROGRAM') != './dataset/npy_files/V.npy')
+# remove './dataset/npy_files_short/V.npy' from df in SPECTROGRAM column
+df = df.filter(pl.col('SPECTROGRAM') != './dataset/npy_files_short/V.npy')
 
 # %%
 # split dataframe according to unique spectrograms (i.e. unique audio files)
 
 df_unique = df['SPECTROGRAM'].unique().drop_nulls()
-print(df_unique)
+# print(df_unique)
 
 # # split into train and test
 train_df, test_df = train_test_split(df_unique, test_size=0.1, random_state=0)

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def print_score(notes, text=True, plot=False, resolution=8):
+def print_score(notes, text=True, plot=False, resolution=8, ):
 
     # left up down right
     arrows = ['▼','◀','▶','▲']
@@ -50,6 +50,7 @@ def print_score(notes, text=True, plot=False, resolution=8):
         string = string.replace('3', holdoff)
 
         return string
+    
     if text:
         str_out = ''
         for idx, line in enumerate(notes):

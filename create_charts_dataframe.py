@@ -95,18 +95,22 @@ for chart in tqdm(charts):
     # item['NOTES'] = NOTES
     all_items.append(item)
 
-# print('Number of Songs:', len(all_items))
+print('Number of Songs:', len(all_items))
 
 # create polars dataframe
 df = pl.concat([pl.from_dict(i) for i in all_items])
 # filter out non-single charts
 df = df.filter(pl.col('NOTES_type').str.contains('single:'))
+print('filtering out non-single charts')
+print('Number of Songs:', df.shape)
+
+
 
 def zero_inflate(bar, target=96):
     steps = len(bar)
     
     if steps%4 != 0:
-        print('ERROR',steps)
+        print('ERROR', steps)
         print('ERROR', bar)
         raise Exception
 
@@ -126,7 +130,7 @@ def sanitize_bar(bar):
     new_bar = new_bar.replace('4','2') # 4 are holds
     return new_bar.split('\n')
 
-def preprocess_chart(row):
+def preprocess_chart(row, inflate=True):
     # print('HELLO',row)
     temp = row
     # print(row)
@@ -138,31 +142,46 @@ def preprocess_chart(row):
     # print(temp)
     temp = [t.split() for t in temp]
     # print(temp)
-    temp = [zero_inflate(t,96) for t in temp]
-    temp = [sanitize_bar(t) for t in temp]
-    temp = ['\n'.join(t) for t in temp]
-    return '\n'.join(temp)
+    if inflate: 
+        temp = [zero_inflate(t,96) for t in temp]
+    temp = [sanitize_bar(t) for t in temp] # remove mines
+    temp = ['\n'.join(t) for t in temp] # newline between steps
+    if inflate: 
+        return '\n'.join(temp)
+    else: 
+        return '\n,\n'.join(temp) #comma between bars
 
-preprocessed_charts = []
 
 print('Chart cleanup and zero-inflation...')
+print('Also adding a version without zero-inflation')
+inflated_charts = []
+non_inflated_charts = []
 # for row in df.iter_rows(named=True):
 for i in tqdm(range(len(df))):
     c = df[i]['NOTES'].item()
     try: 
-        preprocessed_charts.append(preprocess_chart(c))
+        inflated_charts.append(preprocess_chart(c))
+        non_inflated_charts.append(preprocess_chart(c, inflate=False))
     except Exception as e:
-        print(df[i]['#TITLE'])
-        print(df[i]['NOTES'])
-
-df = df.with_columns(pl.Series(name="NOTES_preproc", values=preprocessed_charts)) 
+        print(e)
+        # print(df[i]['#TITLE'])
+        # print(df[i]['NOTES'])
+df = df.with_columns(pl.Series(name="NOTES_preproc", values=inflated_charts)) 
+df = df.with_columns(pl.Series(name="NOTES_preproc_sparse", values=non_inflated_charts)) 
 # print(df.head(5))
 
-df = df.with_columns(pl.Series(name="chart_length", values=df['NOTES_preproc'].map_elements(lambda x: len(x.split('\n')))))            
+outpath = './dataset/DDR_dataset.json'
+print('Saving JSON file:', outpath)
+df.write_json(outpath)
+
+df = df.with_columns(pl.Series(name="chart_length", values=df['NOTES_preproc'].map_elements(lambda x: len(x.split('\n')))))
+df = df.with_columns(pl.Series(name="sparse_length", values=df['NOTES_preproc_sparse'].map_elements(lambda x: len(x.split('\n')))))
+
+
 #filter df to only include rows with chart_lenght less than 10000
-print('filtering charts larger than 10000')
-df = df.filter(df['chart_length'] < 10000)
+print('filtering charts longer than 2000 and shorter than 100')
+df =  df.filter((pl.col('sparse_length') > 100) & (pl.col('sparse_length') < 2000))
+outpath = './dataset/DDR_dataset_2k.json'
+print('Saving JSON file:', outpath)
+df.write_json(outpath)
 
-
-print('Saving JSON file')
-df.write_json('./dataset/DDR_dataset.json')
