@@ -7,7 +7,13 @@ __pycache__/
 .*
 checkpoints/
 wandb/
+<<<<<<< HEAD
 parsed_files/
+=======
+lightning_logs/
+ddr/
+artefacts/
+>>>>>>> nicolas-train
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
