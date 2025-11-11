@@ -7,8 +7,9 @@ import logging as smlog
 import os
 import sys
 import traceback
+import soundfile as sf
 
-from legacy.abstime import calc_note_abs_times
+from abstime import calc_note_abs_times
 from parse import parse_sm_txt
 
 _ATTR_REQUIRED = ['title', 'offset', 'bpms', 'notes']
@@ -21,7 +22,11 @@ def find_and_parse_sm_files(sm_dp):
         # open file
         sm_fp = os.path.join(root, sm_name)
         with open(sm_fp, 'r') as sm_f:
-          sm_txt = sm_f.read()
+          try:
+            sm_txt = sm_f.read()
+          except UnicodeDecodeError:
+            smlog.error('Unicode error in {}'.format(sm_fp))
+            continue
 
         # parse file
         try:
@@ -67,15 +72,20 @@ def find_and_parse_sm_files(sm_dp):
 
         # attach absolute music path for convenience
         music_fp = os.path.join(root, sm_attrs['music'])
+        # if file does not exist or it does not finish with .ogg or .mp3, try to find a music file in the folder
+        if not os.path.exists(music_fp) or (not music_fp.endswith('.ogg') and not music_fp.endswith('.mp3')):
+          files_in_folder = os.listdir(root)
+          # if any of the files ends in ".ogg" or ".mp3", use that as the music file
+          for file in files_in_folder:
+            if file.endswith(".ogg") or file.endswith(".mp3"):
+              music_fp = os.path.join(root, file)
+              break
         songs.append((sm_fp, music_fp, sm_attrs))
   return songs
 
 if __name__ == '__main__':
   (SM_DIR, DS_OUT_DIR) = sys.argv[1:3]
   OPTS = sys.argv[3:]
-  GEN_PREVIEWS = 'genprevs' in OPTS
-  if GEN_PREVIEWS:
-    from legacy.preview import write_preview_wav
   sm_files = find_and_parse_sm_files(SM_DIR)
   avg_difficulty = 0.0
   num_charts = 0
@@ -97,24 +107,23 @@ if __name__ == '__main__':
     offset = sm_attrs['offset']
 
     for idx, sm_notes in enumerate(sm_attrs['notes']):
-      notes_abs_times = calc_note_abs_times(offset, bpms, sm_notes[5])
-      notes = {
-        'type': sm_notes[0],
-        'desc_or_author': sm_notes[1],
-        'difficulty_coarse': sm_notes[2],
-        'difficulty_fine': sm_notes[3],
-        'notes': notes_abs_times,
-      }
-      out_json['charts'].append(notes)
+      try:
+        notes_abs_times = calc_note_abs_times(offset, bpms, sm_notes[5])
+        notes = {
+          'type': sm_notes[0],
+          'desc_or_author': sm_notes[1],
+          'difficulty_coarse': sm_notes[2],
+          'difficulty_fine': sm_notes[3],
+          'notes': notes_abs_times,
+        }
+        out_json['charts'].append(notes)
 
-      if GEN_PREVIEWS:
-        out_wav_fp = os.path.abspath(os.path.join(out_dir, '{}_{}.wav'.format(smname, idx)))
-        write_preview_wav(out_wav_fp, notes_abs_times)
-        notes['preview_fp'] = out_wav_fp
-
-      note_difficulty = sm_notes[3]
-      avg_difficulty += float(note_difficulty)
-      num_charts += 1
+        note_difficulty = sm_notes[3]
+        avg_difficulty += float(note_difficulty)
+        num_charts += 1
+      except Exception as e:
+        smlog.error('Unhandled note parse exception {}\nin\n{}'.format(traceback.format_exc(), sm_fp))
+        continue
 
     with open(out_json_fp, 'w') as out_f:
       try:
@@ -123,5 +132,5 @@ if __name__ == '__main__':
         smlog.error('Unicode error in {}'.format(sm_fp))
         continue
 
-    print('Parsed {} - {}: {} charts'.format(packname, smname, len(out_json['charts'])))
+    # print('Parsed {} - {}: {} charts'.format(packname, smname, len(out_json['charts'])))
   print('Parsed {} stepfiles, {} charts, average difficulty {}'.format(len(sm_files), num_charts, avg_difficulty / num_charts))
