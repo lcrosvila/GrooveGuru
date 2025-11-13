@@ -11,6 +11,7 @@ lightning_logs/
 ddr/
 artefacts/
 parsed_files/
+parsed_dataset/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
